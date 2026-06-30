@@ -40,14 +40,12 @@ const ConfigSchema = z.object({
   }).default({ daily: true, minGas: "0.01", provider: "2captcha" }),
   arkada: z.object({
     enabled: z.boolean().default(true),
-    campaign: z.string().default("litvm"),
-    apiBase: z.string().optional(),
-    nonceRoute: z.string().optional(),
-    verifyLoginRoute: z.string().optional(),
-    questsRoute: z.string().optional(),
-    verifyRoute: z.string().optional(),
-    claimRoute: z.string().optional(),
-  }).default({ enabled: true, campaign: "litvm" }),
+    apiBase: z.string().default("https://app-api.arkada.gg"),
+    campaignPrefix: z.string().default("litvm"),   // litvm hub = every campaign slug starting with this
+    signupChainId: z.number().int().default(CHAIN_ID),
+    skipSocial: z.boolean().default(true),          // skip x.com/twitter/discord/t.me quests
+    includeDaily: z.boolean().default(true),
+  }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true }),
   questActions: z.record(z.string(), QuestActionSchema).default({}),
   steps: z.object({
     register: z.boolean().default(true),

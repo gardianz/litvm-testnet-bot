@@ -1,21 +1,31 @@
 import { describe, it, expect, vi } from "vitest";
-import { listQuests, verifyQuest } from "../src/arkada/client.js";
+import { listCampaignSlugs, getQuests, checkQuest, completeQuest, isSocial } from "../src/arkada/client.js";
 
-const A = { enabled: true, campaign: "litvm", apiBase: "https://api.arkada.gg", questsRoute: "/campaigns/{campaign}/quests", verifyRoute: "/quests/{id}/verify" } as any;
+const A = { enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm" } as any;
 
 describe("arkada client", () => {
-  it("returns [] when questsRoute unset", async () => {
-    expect(await listQuests({ arkada: { enabled: true, campaign: "litvm" } as any, token: "t" })).toEqual([]);
+  it("listCampaignSlugs filters by prefix", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ([{ slug: "litvm-lester" }, { slug: "other-x" }, { slug: "litvm-zns-daily" }]) } as any);
+    const slugs = await listCampaignSlugs(A, "t", fetchImpl);
+    expect(slugs).toEqual(["litvm-lester", "litvm-zns-daily"]);
+    expect(fetchImpl.mock.calls[0][0]).toContain("/campaigns?limit=300");
   });
-  it("lists + normalizes quests, substituting {campaign}", async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ quests: [{ id: "1", slug: "gm", title: "GM", status: "completed", type: "daily" }] }) } as any);
-    const qs = await listQuests({ arkada: A, token: "t", fetchImpl });
-    expect(fetchImpl.mock.calls[0][0]).toContain("/campaigns/litvm/quests");
-    expect(qs[0]).toMatchObject({ id: "1", slug: "gm", name: "GM", completed: true, daily: true });
+  it("getQuests normalizes fields", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ quests: [{ id: "1", name: "Mint", quest_type: "link", link: "https://x", optional: false }] }) } as any);
+    const qs = await getQuests(A, "litvm-lester", "t", fetchImpl);
+    expect(qs[0]).toMatchObject({ id: "1", slug: "litvm-lester", name: "Mint", type: "link", link: "https://x" });
   });
-  it("verify substitutes {id} and reads success", async () => {
-    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) } as any);
-    expect(await verifyQuest({ arkada: A, token: "t", questId: "1", fetchImpl })).toBe(true);
-    expect(fetchImpl.mock.calls[0][0]).toContain("/quests/1/verify");
+  it("checkQuest true on ok, false on 422", async () => {
+    expect(await checkQuest(A, "1", "t", vi.fn().mockResolvedValueOnce({ ok: true } as any))).toBe(true);
+    expect(await checkQuest(A, "1", "t", vi.fn().mockResolvedValueOnce({ ok: false, status: 422 } as any))).toBe(false);
+  });
+  it("completeQuest reads isCompleted", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ isCompleted: true }) } as any);
+    expect(await completeQuest(A, "1", "t", fetchImpl)).toBe(true);
+  });
+  it("isSocial detects x.com / discord / t.me", () => {
+    expect(isSocial("https://x.com/foo")).toBe(true);
+    expect(isSocial("https://discord.gg/x")).toBe(true);
+    expect(isSocial("https://lester-labs.com/launch")).toBe(false);
   });
 });

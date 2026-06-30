@@ -19,7 +19,8 @@ describe("loadConfig", () => {
     expect(c.dryRun).toBe(true);
     expect(c.faucet.daily).toBe(true);
     expect(c.arkada.enabled).toBe(true);
-    expect(c.arkada.campaign).toBe("litvm");
+    expect(c.arkada.apiBase).toBe("https://app-api.arkada.gg");
+    expect(c.arkada.campaignPrefix).toBe("litvm");
     expect(c.steps.arkada).toBe(true);
     expect(c.questActions).toEqual({});
   });

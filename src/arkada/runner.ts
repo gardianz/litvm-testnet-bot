@@ -1,52 +1,69 @@
 import type { Ctx } from "../steps/types.js";
 import type { Quest } from "./client.js";
 import { arkadaLogin } from "./auth.js";
-import { listQuests, verifyQuest, claimQuest } from "./client.js";
+import { listCampaignSlugs, getQuests, checkQuest, completeQuest, isSocial } from "./client.js";
 import { runAction } from "./actions.js";
 import { signSiwe } from "../siwe.js";
 import { ranToday, markRan } from "../state.js";
 
 export type RunnerDeps = {
-  login: typeof depLogin;
-  list: (token: string) => Promise<Quest[]>;
-  verify: (token: string, id: string) => Promise<boolean>;
-  claim: (token: string, id: string) => Promise<boolean>;
+  login: (ctx: Ctx) => Promise<{ token: string } | null>;
+  listSlugs: (token: string) => Promise<string[]>;
+  getQuests: (slug: string, token: string) => Promise<Quest[]>;
+  check: (id: string, token: string) => Promise<boolean>;
+  complete: (id: string, token: string) => Promise<boolean>;
   action: typeof runAction;
 };
 
 async function depLogin(ctx: Ctx): Promise<{ token: string } | null> {
-  return arkadaLogin({
-    arkada: ctx.cfg.arkada, address: ctx.clients.address, chainId: ctx.cfg.chainId,
-    sign: (msg) => signSiwe(ctx.clients.wallet, msg),
-  });
+  return arkadaLogin({ arkada: ctx.cfg.arkada, address: ctx.clients.address, sign: (m) => signSiwe(ctx.clients.wallet, m) });
 }
+
+function isDaily(slug: string): boolean { return slug.endsWith("-daily"); }
 
 export async function runQuests(ctx: Ctx, deps?: Partial<RunnerDeps>): Promise<Record<string, string>> {
   const d: RunnerDeps = {
     login: deps?.login ?? depLogin,
-    list: deps?.list ?? ((token) => listQuests({ arkada: ctx.cfg.arkada, token })),
-    verify: deps?.verify ?? ((token, id) => verifyQuest({ arkada: ctx.cfg.arkada, token, questId: id })),
-    claim: deps?.claim ?? ((token, id) => claimQuest({ arkada: ctx.cfg.arkada, token, questId: id })),
+    listSlugs: deps?.listSlugs ?? ((t) => listCampaignSlugs(ctx.cfg.arkada, t)),
+    getQuests: deps?.getQuests ?? ((s, t) => getQuests(ctx.cfg.arkada, s, t)),
+    check: deps?.check ?? ((id, t) => checkQuest(ctx.cfg.arkada, id, t)),
+    complete: deps?.complete ?? ((id, t) => completeQuest(ctx.cfg.arkada, id, t)),
     action: deps?.action ?? runAction,
   };
   const session = await d.login(ctx);
   if (!session) return { arkada: "no-login" };
+  const token = session.token;
 
-  const quests = await d.list(session.token);
+  const slugs = await d.listSlugs(token);
   const out: Record<string, string> = {};
-  for (const q of quests) {
-    const dailyDue = q.daily && !ranToday(ctx.state, `quest:${q.slug}`);
-    if (q.completed && !dailyDue) { out[q.slug] = "already"; continue; }
-    const mapped = ctx.cfg.questActions[q.slug];
-    if (!mapped) { out[q.slug] = "unmapped"; ctx.log(`quest ${q.slug}: no action mapping — skip`); continue; }
-    const a = await d.action(ctx, mapped);
-    if (!a.ran) { out[q.slug] = `action-fail:${a.reason ?? "?"}`; continue; }
-    if (ctx.dryRun) { out[q.slug] = "ran"; continue; }
-    const verified = await d.verify(session.token, q.id);
-    if (!verified) { out[q.slug] = "verify-fail"; continue; }
-    const claimed = await d.claim(session.token, q.id);
-    markRan(ctx.acc.id, `quest:${q.slug}`, { txs: a.tx ? [a.tx] : [], done: !q.daily });
-    out[q.slug] = claimed ? "done" : "verified";
+  for (const slug of slugs) {
+    if (isDaily(slug) && !ctx.cfg.arkada.includeDaily) continue;
+    const quests = await d.getQuests(slug, token);
+    for (const q of quests) {
+      const key = `quest:${q.id}`;
+      const daily = isDaily(slug);
+      const tag = `${slug}/${q.name}`;
+      if (ctx.cfg.arkada.skipSocial && isSocial(q.link, q.type)) { out[tag] = "social-skip"; continue; }
+      if (daily) { if (ranToday(ctx.state, key)) { out[tag] = "daily-done"; continue; } }
+      else if (ctx.state[key]?.done) { out[tag] = "already"; continue; }
+
+      if (ctx.dryRun) { out[tag] = `dry:${q.type || "?"}`; continue; }
+
+      // on-chain quests: run mapped action (if any), then Arkada must confirm via check-quest.
+      if (q.type !== "link") {
+        const mapped = ctx.cfg.questActions[q.id] ?? ctx.cfg.questActions[slug];
+        if (mapped) {
+          const a = await d.action(ctx, mapped);
+          if (!a.ran) { out[tag] = `action-fail:${a.reason ?? "?"}`; continue; }
+          if (a.tx) markRan(ctx.acc.id, key, { txs: [a.tx] });
+        }
+        if (!(await d.check(q.id, token))) { out[tag] = mapped ? "not-verified" : "unmapped"; continue; }
+      }
+
+      const ok = await d.complete(q.id, token);
+      markRan(ctx.acc.id, key, { done: !daily });
+      out[tag] = ok ? "done" : "claim-fail";
+    }
   }
   return out;
 }

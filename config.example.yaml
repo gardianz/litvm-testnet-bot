@@ -28,28 +28,26 @@ faucet:
 
 arkada:
   enabled: true
-  campaign: "litvm"
-  # discover from app.arkada.gg network tab (see docs/litvm-live-notes.md):
-  # apiBase: "https://api.arkada.gg"
-  # nonceRoute: "/auth/nonce"
-  # verifyLoginRoute: "/auth/verify"
-  # questsRoute: "/campaigns/litvm/quests"
-  # verifyRoute: "/quests/{id}/verify"
-  # claimRoute: "/quests/{id}/claim"
+  apiBase: "https://app-api.arkada.gg"   # CONFIRMED live
+  campaignPrefix: "litvm"                 # hub = every campaign slug starting with this
+  signupChainId: 4441
+  skipSocial: true                        # skip x.com/twitter/discord/t.me quests
+  includeDaily: true                      # also run *-daily campaigns each UTC day
 
-# Map Arkada quest slug -> on-chain action. Fill as you identify each node.
-# Unmapped quests skip with a warning.
+# Map an on-chain quest to its dApp action, keyed by Arkada quest UUID (or campaign slug).
+# quest_type=link quests claim directly (no mapping). on-chain quests need the tx first
+# so Arkada's check-quest passes. Find contracts with `npm run discover -- <addr>`.
 questActions: {}
-#   onchaingm-gm:
+#   "7b0552a0-99c6-4989-9f75-4570172414a6":   # litvm-lester "Mint"
+#     address: "0x..."
+#     signature: "function mint()"
+#     args: []
+#     valueWei: "0"
+#   litvm-zns-daily:                           # by campaign slug (applies to its on-chain quest)
 #     address: "0x..."
 #     signature: "function gm()"
 #     args: []
 #     valueWei: "0"
-#   lester-deploy:
-#     address: "0x..."        # token factory
-#     signature: "function createToken(string,string,uint256)"
-#     args: ["LitVM Test", "LVT", "1000000000000000000000000"]
-#     valueWei: "50000000000000000"   # 0.05 zkLTC
 
 steps:
   register: true
