@@ -29,9 +29,27 @@ Tune in `config.yaml` under `arkada:` (`campaignPrefix`, `skipSocial`,
   `questActions[<questId|slug>]` (`address`, `signature`, `args`, `valueWei`) —
   use `npm run discover -- <addr>` to confirm the contract fn. Unmapped on-chain
   quests are reported `unmapped` (no guessed tx).
-- Faucet (`faucetEndpoint`/`faucetSitekey`) + register (`registerApi`) are behind
-  Cloudflare/SPA; capture from the Network tab if you want them, else fund gas
-  manually. Both **skip with a warning** when unset. See `docs/litvm-live-notes.md`.
+- Register (`registerApi`) is behind the SPA; capture from the Network tab if you
+  want it, else skip (Arkada's litvm-arkada "Verify Wallet" covers the portal need).
+
+## Faucet (gas) — `npm run faucet`
+
+Auto-claims the Caldera faucet (**0.1 zkLTC** per fresh wallet). It passes the hub's
+Vercel checkpoint with a short headless browser, solves the Cloudflare Turnstile via
+2captcha, and calls the `hub.requestFaucetFunds` tRPC. `recipientAddress` is a param —
+no wallet connect.
+
+```bash
+npm i playwright        # one-time (+ its system libs; present on most VPS)
+# .env: CAPTCHA_API_KEY=<2captcha key>
+npm run faucet           # claim for all accounts in accounts.json
+npm run faucet -- acc3   # one account by id
+npm run faucet -- 0xABC… # one raw address
+```
+
+An address already at the faucet cap/cooldown returns "Failed to send transaction" —
+expected; claim per wallet, not repeatedly. Run on demand (not in the daemon loop).
+See `docs/litvm-live-notes.md` for the full mechanism.
 
 ## Run
 

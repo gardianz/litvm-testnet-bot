@@ -14,7 +14,8 @@
     "check": "tsx src/main.ts --check --no-dashboard",
     "gen": "tsx src/main.ts --gen",
     "discover": "tsx tools/discover.ts",
-    "verify": "tsx tools/verify-deployment.ts"
+    "verify": "tsx tools/verify-deployment.ts",
+    "faucet": "node tools/faucet-claim.mjs"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

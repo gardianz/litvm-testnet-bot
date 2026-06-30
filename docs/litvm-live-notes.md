@@ -106,19 +106,28 @@ Points stay 0 until **Claim Reward** per campaign. That is an on-chain mint, not
   calldata bakes in amounts/deadlines/approvals/nonces — they need bespoke per-dApp calls
   (real ABI + fresh args + token approvals). Map those in `questActions[<questId|slug>]`.
 - Link/trust quests: complete-quest claims directly (34 completed live).
-- Gas: faucet (liteforge.hub.caldera.xyz) is Cloudflare-gated → not backend-automatable; fund wallets manually.
+- Gas: faucet auto-claim SOLVED — see below.
 
-## Faucet (Caldera hub) — Vercel checkpoint SOLVED, drip last-mile pending
+## Faucet (Caldera hub) — SOLVED ✅ (verified live: fresh wallet +0.1 zkLTC)
 The hub is gated by a **Vercel Security Checkpoint** (WASM JS challenge); plain HTTP = 429.
-- **Pass technique (works):** clean headless Playwright (chrome-headless-shell, realistic UA,
-  NO stealth/init-script tampering before the challenge, single goto + ~12s wait). Stealth
-  patches and full-chromium override BREAK it; keep the first context clean.
-- The Vercel pass sets cookie **`_vcrcs`** — reuse it (storageState) in a second context that
-  injects the wallet, so the wallet context skips the challenge.
-- Faucet UI is **connect-wallet only** (no address field) + uses **EIP-6963** wallet discovery.
-- Tool: `tools/faucet-claim.mjs` — passes checkpoint, reuses cookie, injects an EIP-6963
-  provider bridged to a real viem signer (pk stays in Node via Playwright exposeFunction),
-  then connects + clicks Request. Requires `npm i playwright` + its system libs.
-- STATUS: checkpoint + cookie + signer bridge confirmed; the headless connect+Request did not
-  yet trigger the drip in this sandbox. Finish on the VPS (headed Chrome or tune the wagmi
-  connector/Request selectors). Not part of the always-on backend pipeline — run on demand.
+The faucet is a **tRPC mutation** that needs a **Cloudflare Turnstile** token.
+
+Full flow (`tools/faucet-claim.mjs`, run on demand):
+1. **Pass the Vercel checkpoint** with a clean headless Playwright context: chrome-headless-shell,
+   realistic desktop UA, **NO stealth/init-script tampering before the challenge**, single goto +
+   ~12s wait, retry a few times. (Stealth patches and a full-chromium executablePath BREAK it.)
+   The challenge can only be passed by a real browser engine — `ctx.request`/curl are re-challenged
+   (Vercel also fingerprints TLS), so the tRPC call must run as an **in-page `fetch`**.
+2. **Solve Turnstile** via 2captcha: sitekey **`0x4AAAAAAASRorjU_k9HAdVc`**, pageurl `https://liteforge.hub.caldera.xyz/`.
+3. **Claim** via in-page fetch:
+   ```
+   POST /api/trpc/hub.requestFaucetFunds?batch=1
+   body {"0":{"json":{"rollupSubdomain":"liteforge","recipientAddress":"0x..","turnstileToken":"<2captcha>"}}}
+   ```
+   Success → `{"success":true,"transactionHash":"0x.."}` and the address receives **0.1 zkLTC**.
+- `recipientAddress` is a parameter — **no wallet connect needed**; claim for any address.
+- Per-address cap/cooldown: an address already at the cap returns `{"success":false,"message":"Failed to send transaction"}`.
+  (Our funded main wallet hit this; a fresh wallet succeeded.) So claim per-wallet, not repeatedly.
+- Requires `npm i playwright` + its system libs (libnspr4, libnss3, libasound2 — present on the VPS
+  since forge/faucet-pow run there) and `CAPTCHA_API_KEY` in `.env`. Off the always-on backend
+  pipeline; run when wallets need gas: `node tools/faucet-claim.mjs [accountId|0xaddr]`.
