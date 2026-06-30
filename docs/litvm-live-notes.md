@@ -131,3 +131,20 @@ Full flow (`tools/faucet-claim.mjs`, run on demand):
 - Requires `npm i playwright` + its system libs (libnspr4, libnss3, libasound2 — present on the VPS
   since forge/faucet-pow run there) and `CAPTCHA_API_KEY` in `.env`. Off the always-on backend
   pipeline; run when wallets need gas: `node tools/faucet-claim.mjs [accountId|0xaddr]`.
+
+## Ecosystem on-chain actions (Arkada-free) — WORKING ✅
+Direct dApp interactions on litVM testnet (chainId 4441). `src/ecosystem/dapps.ts`,
+run via the `ecosystem` step. All live-verified on a faucet-funded wallet.
+- **onmi.fun** create-token — `0x432b8b70a63eBB6b90CDFa1F7FeCDf2DD34e7c4E`
+  `createToken(name,symbol,uri,startTs,endTs,referrer)` value 0. Verified ABI (TokenLauncherV2Factory).
+- **zns.bio** register .lit — `0x1c6C28403400c44D8D351dEaBcF7B1365F96EbF1`
+  `registerDomains([owner],[name],[1],0x0,0)` value 0.002 zkLTC.
+- **lester-labs** launch — `0x93acc6…` (mint, 0.05 zkLTC) + `0xC9B196…` (create, 0.03 zkLTC).
+  Unverified ABI → fulfilled by replaying a recent successful tx (sender substituted).
+Each runs once/UTC-day, simulate-guarded, chainId-4441 asserted before broadcast.
+
+### Not built (need bespoke / not full-backend-feasible)
+- **sweep.haus** Lit_Pass — `claim(...merkle proof...)` needs an allowlist Merkle proof. Skip.
+- **litvmswap** swap / **ayni** borrow — need ERC20 balances + approvals + market state
+  (multi-step DeFi); replay reverts. Would need per-dApp token setup.
+- **midashand** markets — not yet mapped.

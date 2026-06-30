@@ -1,6 +1,7 @@
 import type { Ctx } from "../steps/types.js";
-import { DAPPS } from "./dapps.js";
+import { DAPPS, type Built } from "./dapps.js";
 import { assertChain } from "../evm.js";
+import { replayCalldata } from "../arkada/onchain.js";
 import { ranToday, markRan } from "../state.js";
 
 // Run each enabled ecosystem dApp action once per UTC day. Each is simulated
@@ -13,7 +14,14 @@ export async function runEcosystem(ctx: Ctx): Promise<Record<string, string>> {
     if (!dapp) { out[key] = "unknown-dapp"; continue; }
     if (ranToday(ctx.state, `eco:${key}`)) { out[key] = "daily-done"; continue; }
 
-    const built = dapp.build(ctx.clients.address);
+    let built: Built;
+    if (dapp.build) {
+      built = dapp.build(ctx.clients.address);
+    } else if (dapp.replay) {
+      const r = await replayCalldata(ctx.cfg.explorerApi, dapp.to, ctx.clients.address);
+      if (!r) { out[key] = "no-replay"; continue; }
+      built = { to: dapp.to, data: r.data, value: r.value };
+    } else { out[key] = "no-builder"; continue; }
     const params = { account: ctx.clients.address, to: built.to, data: built.data, value: built.value };
     try {
       await ctx.clients.public.call(params);

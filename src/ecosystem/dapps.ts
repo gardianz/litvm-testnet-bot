@@ -9,10 +9,15 @@ const rand = (n: number) => Math.random().toString(36).slice(2, 2 + n);
 
 export type Built = { to: `0x${string}`; data: `0x${string}`; value: bigint };
 
+// A dApp action is either built from a known ABI (`build`) or fulfilled by
+// replaying a recent successful tx to the contract with our address substituted
+// in (`replay: true`) — used for unverified contracts whose calldata is not
+// parameter-bound (token launchers, etc.).
 export type Dapp = {
   name: string;
   to: `0x${string}`;
-  build: (addr: `0x${string}`) => Built;
+  build?: (addr: `0x${string}`) => Built;
+  replay?: boolean;
 };
 
 export const DAPPS: Record<string, Dapp> = {
@@ -52,4 +57,9 @@ export const DAPPS: Record<string, Dapp> = {
       return { to: this.to, data, value: 2000000000000000n }; // 0.002 zkLTC
     },
   },
+
+  // lester-labs.com/launch — token launcher (unverified ABI). Calldata is not
+  // parameter-bound, so replay a recent successful launch with our address.
+  "lester-mint": { name: "lester-labs launch (mint)", to: "0x93acc61fcdc2e3407A0c03450Adfd8aE78964948", replay: true },
+  "lester-create": { name: "lester-labs create", to: "0xC9B1961def0cC5bc1ffe3cFe37a4988D7987A43f", replay: true },
 };
