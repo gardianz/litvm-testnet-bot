@@ -57,7 +57,7 @@ async function solveTurnstile() {
   throw new Error("2captcha timeout");
 }
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 const LOOP = process.argv.includes("--loop");
 const FAUCET_STATE = "state/faucet.json";
 const loadFaucetState = () => { try { return JSON.parse(readFileSync(FAUCET_STATE, "utf8")); } catch { return {}; } };
