@@ -44,6 +44,12 @@ const drunkencats: Flow = {
         data: enc("function addLiquidityNative(address,uint256,uint256,uint256,address,uint256)", "addLiquidityNative", [DCUSDT, amt, 0n, 0n, address, dl()]) });
       return txs;
     } },
+    { id: "createVault", gate: "once", build: async () => [
+      // VaultManager.openVault(dcUSDAmount) payable — collateral = native value.
+      // Protocol minimums: debt >= 1 dcUSD, ICR >= MCR (~0.03 zkLTC/1 dcUSD). Open one vault per address.
+      { to: "0x7a1d18b9172E60d7587dd3180697277e75558E41", value: 40000000000000000n, label: "openVault 1 dcUSD",
+        data: enc("function openVault(uint256)", "openVault", [1000000000000000000n]) },
+    ] },
     { id: "removeLiquidity", gate: "daily", build: async ({ address, pub }) => {
       const pair = await pub.readContract({ address: DC_FACTORY, abi: FACTORY_ABI, functionName: "getPair", args: [DCUSDT, WZKLTC] }) as `0x${string}`;
       if (!pair || pair === ZERO) return [];
@@ -102,7 +108,11 @@ const omnihub: Flow = {
             ["Public Mint", now, now + 15552000n, 0n, 0n, "0x0000000000000000000000000000000000000000000000000000000000000000"],
             [`https://litvm.local/oh/${rand(8)}.json`, "https://litvm.local/oh/", "https://litvm.local/oh/img.png", false]]]) }];
     } },
-    // NOTE: litvm-omnihub collection mint (once) — collection address + mint fn to be captured (see live-notes). Placeholder skipped until confirmed.
+    // litvm-omnihub collection mint — once per address. mint(phaseId, qty, referrer, proof[]) value 0.02.
+    { id: "mintLitvmOmnihub", gate: "once", build: async () => [
+      { to: "0xCe29a8993CE78E420BfC7646f4AEa90B42bFd9D9", value: 20000000000000000n, label: "mint litvm-omnihub",
+        data: enc("function mint(uint256,uint256,address,bytes32[])", "mint", [0n, 1n, ZERO, []]) },
+    ] },
   ],
 };
 

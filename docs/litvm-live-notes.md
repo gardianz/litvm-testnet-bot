@@ -169,3 +169,9 @@ drunkencats router `0xAE92F4644Cc11f837dC4Be12B83D6FD4E887AFEE`, tokens dcXAU `0
 - midashand prediction: needs market + token.
 - sweep.haus Lit_Pass: claim() needs a Merkle allowlist proof.
 - litvmswap/litdex aggregator token-swap (unverified routers): would need in-browser calldata capture (UI connect via injected EIP-6963 wallet) — drunkencats already covers real token swaps.
+
+## Flow bot — full live run (acc5, one wallet, 14 txs all success)
+drunkencats: faucet()x2, swap native->dcUSDT, addLiquidityNative, **openVault(1 dcUSD, 0.04 collateral)**, removeLiquidityNative(leave 10%).
+onmi createToken. zns gm (0x779a220b, fee 0.004) + registerDomains .lit. omnihub create + **mint litvm-omnihub** (0xCe29a899, mint(0,1,0x0,[]) value 0.02). litvmswap wrap.
+- drunkencats VaultManager `0x7a1d18b9…` openVault(uint256 dcUSD) payable; min debt 1 dcUSD, MCR ~0.03 zkLTC/dcUSD.
+- omnihub litvm-omnihub collection `0xCe29a8993CE78E420BfC7646f4AEa90B42bFd9D9` (proxy), mint(uint256,uint256,address,bytes32[]) sel 0xa25ffea8 value 0.02; gate once.
