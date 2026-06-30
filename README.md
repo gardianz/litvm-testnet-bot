@@ -13,17 +13,25 @@ cp proxy.txt.example proxy.txt  # optional
 npm run gen -- 5                # generate 5 wallets into accounts.json
 ```
 
-## Configure live endpoints (one-time)
+## Arkada — works out of the box
 
-Arkada/register/faucet APIs aren't public. Capture them from the sites' Network
-tab (your own machine) and fill `config.yaml`:
+The Arkada API is **live-verified and pre-wired** (`app-api.arkada.gg`): the bot
+logs in via wallet signature, lists every `litvm-*` campaign, and claims each
+quest. `quest_type=link` quests claim directly; social (X/Discord/Telegram)
+quests are skipped. `-daily` campaigns re-run each UTC day. No config needed.
 
-- `registerApi`, `faucetEndpoint`, `faucetSitekey`
-- `arkada.apiBase` + routes
-- `questActions[<slug>]` per Arkada map node (use `npm run discover -- <addr>`)
+Tune in `config.yaml` under `arkada:` (`campaignPrefix`, `skipSocial`,
+`includeDaily`). Verified live: one run claimed 34 litvm quests for a wallet.
 
-Unmapped quests / unset endpoints **skip with a warning** — never a guessed tx.
-See `docs/litvm-live-notes.md`.
+### Optional: on-chain quests, faucet, register
+
+- Some quests want a real on-chain tx before Arkada credits them. Map them in
+  `questActions[<questId|slug>]` (`address`, `signature`, `args`, `valueWei`) —
+  use `npm run discover -- <addr>` to confirm the contract fn. Unmapped on-chain
+  quests are reported `unmapped` (no guessed tx).
+- Faucet (`faucetEndpoint`/`faucetSitekey`) + register (`registerApi`) are behind
+  Cloudflare/SPA; capture from the Network tab if you want them, else fund gas
+  manually. Both **skip with a warning** when unset. See `docs/litvm-live-notes.md`.
 
 ## Run
 
