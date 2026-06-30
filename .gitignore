@@ -1,0 +1,8 @@
+node_modules/
+accounts.json
+config.yaml
+proxy.txt
+.env
+state/
+logs/
+*.log
