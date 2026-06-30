@@ -15,7 +15,8 @@
     "gen": "tsx src/main.ts --gen",
     "discover": "tsx tools/discover.ts",
     "verify": "tsx tools/verify-deployment.ts",
-    "faucet": "node tools/faucet-claim.mjs"
+    "faucet": "node tools/faucet-claim.mjs",
+    "faucet:loop": "node tools/faucet-claim.mjs --loop"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

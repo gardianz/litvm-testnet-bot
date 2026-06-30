@@ -57,24 +57,30 @@ async function solveTurnstile() {
   throw new Error("2captcha timeout");
 }
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+const LOOP = process.argv.includes("--loop");
+const FAUCET_STATE = "state/faucet.json";
+const loadFaucetState = () => { try { return JSON.parse(readFileSync(FAUCET_STATE, "utf8")); } catch { return {}; } };
+const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { recursive: true }); writeFileSync(FAUCET_STATE, JSON.stringify(s, null, 2)); };
+const rand = (a, b) => a + Math.random() * (b - a);
+
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"] });
 const ctx = await browser.newContext({ userAgent: UA });
 const page = await ctx.newPage();
-let passed = false;
-for (let i = 0; i < 5 && !passed; i++) {
-  await page.goto(HUB, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(12000);
-  passed = (await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet");
-  if (!passed) { console.log(`checkpoint retry ${i + 1}`); await page.waitForTimeout(5000); }
-}
-if (!passed) { console.error("could not pass Vercel checkpoint"); await browser.close(); process.exit(2); }
-console.log("checkpoint passed");
 
-for (const addr of recipients) {
-  const before = await pub.getBalance({ address: addr }).catch(() => 0n);
-  console.log(`\n${addr}  before=${(Number(before) / 1e18).toFixed(6)} zkLTC`);
+async function ensurePassed() {
+  for (let i = 0; i < 5; i++) {
+    if ((await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet")) return true;
+    await page.goto(HUB, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+    await page.waitForTimeout(12000);
+  }
+  return (await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet");
+}
+
+async function claimOne(addr) {
+  if (!(await ensurePassed())) { console.log("  checkpoint not passed"); return false; }
   let token;
-  try { console.log("  solving turnstile..."); token = await solveTurnstile(); } catch (e) { console.log("  captcha fail:", e.message); continue; }
+  try { token = await solveTurnstile(); } catch (e) { console.log("  captcha fail:", e.message); return false; }
   const r = await page.evaluate(async ({ rollup, addr, token }) => {
     const res = await fetch(`/api/trpc/hub.requestFaucetFunds?batch=1`, {
       method: "POST", headers: { "content-type": "application/json" },
@@ -82,11 +88,31 @@ for (const addr of recipients) {
     });
     return { s: res.status, t: await res.text() };
   }, { rollup: ROLLUP, addr, token });
-  let msg = r.t;
-  try { msg = JSON.stringify(JSON.parse(r.t)[0].result.data.json); } catch {}
-  console.log(`  claim [${r.s}] ${msg.slice(0, 200)}`);
-  await sleep(6000);
-  const after = await pub.getBalance({ address: addr }).catch(() => before);
-  console.log(`  after=${(Number(after) / 1e18).toFixed(6)} zkLTC (+${(Number(after - before) / 1e18).toFixed(6)})`);
+  let ok = false; try { ok = JSON.parse(r.t)[0].result.data.json.success === true; } catch {}
+  console.log(`  ${addr} claim [${r.s}] ${ok ? "OK +0.1" : r.t.slice(0, 120)}`);
+  return ok;
 }
-await browser.close();
+
+if (!LOOP) {
+  for (const addr of recipients) { console.log(`\n${addr}`); await claimOne(addr); await sleep(4000); }
+  await browser.close();
+} else {
+  // per-address random 1–3h scheduling, persisted across restarts
+  console.log(`faucet loop: ${recipients.length} addresses, random 1–3h each`);
+  const st = loadFaucetState();
+  for (;;) {
+    const now = Date.now();
+    for (const addr of recipients) {
+      const next = st[addr]?.nextTs ?? 0;
+      if (now < next) continue;
+      console.log(`[${new Date().toISOString()}] claiming ${addr}`);
+      await claimOne(addr).catch((e) => console.log("  err", e.message));
+      const gapH = rand(1, 3);
+      st[addr] = { nextTs: Date.now() + gapH * 3600_000, lastTry: Date.now() };
+      saveFaucetState(st);
+      console.log(`  next ${addr.slice(0, 10)} in ${gapH.toFixed(2)}h`);
+      await sleep(5000);
+    }
+    await sleep(60_000); // poll every minute
+  }
+}
