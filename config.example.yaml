@@ -52,7 +52,7 @@ questActions: {}
 # Direct on-chain litVM ecosystem actions (no Arkada). Each runs once per UTC day.
 # Available: onmi-createToken, zns-register, lester-mint, lester-create
 ecosystem:
-  dapps: ["onmi-createToken", "zns-register", "lester-mint", "lester-create"]
+  dapps: ["onmi-createToken", "zns-register", "lester-mint", "lester-create", "drunkencats-swap", "omnihub-create"]
 
 steps:
   register: false

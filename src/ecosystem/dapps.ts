@@ -62,4 +62,45 @@ export const DAPPS: Record<string, Dapp> = {
   // parameter-bound, so replay a recent successful launch with our address.
   "lester-mint": { name: "lester-labs launch (mint)", to: "0x93acc61fcdc2e3407A0c03450Adfd8aE78964948", replay: true },
   "lester-create": { name: "lester-labs create", to: "0xC9B1961def0cC5bc1ffe3cFe37a4988D7987A43f", replay: true },
+
+  // drunkencats DEX (DrunkenCatsRouter, verified V2-style) — REAL swap:
+  // swapExactNativeForTokens(amountOutMin, [WzkLTC, token], to, deadline) payable.
+  // Native in → no approval. WzkLTC<->dcUSDT pool confirmed live.
+  "drunkencats-swap": {
+    name: "drunkencats swap (native->dcUSDT)",
+    to: "0xAE92F4644Cc11f837dC4Be12B83D6FD4E887AFEE",
+    build(addr) {
+      const WZKLTC = "0x9bFada6C2BDbA88129da349BF7568C76a750C495" as const;
+      const DCUSDT = "0x43F6117cF64c0c19AC6072f68d010ab10acD224C" as const;
+      const data = encodeFunctionData({
+        abi: parseAbi(["function swapExactNativeForTokens(uint256,address[],address,uint256)"]),
+        functionName: "swapExactNativeForTokens",
+        args: [0n, [WZKLTC, DCUSDT], addr, BigInt(Math.floor(Date.now() / 1000) + 600)],
+      });
+      return { to: this.to, data, value: 1000000000000000n }; // 0.001 zkLTC in
+    },
+  },
+
+  // OmniHub (omnihub.xyz, OmniHubFactory verified) — REAL NFT collection deploy.
+  // create((name,symbol,desc,supply,royalty,transferable,phase,metadata)) payable 0.02.
+  "omnihub-create": {
+    name: "omnihub create collection",
+    to: "0x7798f2Eb73C1Dd8Fa8086d780D5CF114A10F528E",
+    build(addr) {
+      const now = BigInt(Math.floor(Date.now() / 1000));
+      const tag = rand(5).toUpperCase();
+      const data = encodeFunctionData({
+        abi: parseAbi([
+          "function create((string,string,string,uint256,uint256,bool,(string,uint256,uint256,uint256,uint256,bytes32),(string,string,string,bool)))",
+        ]),
+        functionName: "create",
+        args: [[
+          `LitVM ${tag}`, `OH${tag}`, "LitVM testnet collection", 500n, 0n, true,
+          ["Public Mint", now, now + 15552000n, 0n, 0n, "0x0000000000000000000000000000000000000000000000000000000000000000"],
+          [`https://litvm.local/oh/${rand(8)}.json`, `https://litvm.local/oh/`, `https://litvm.local/oh/img.png`, false],
+        ]],
+      });
+      return { to: this.to, data, value: 20000000000000000n }; // 0.02 zkLTC
+    },
+  },
 };
