@@ -1,45 +1,49 @@
 import type { Ctx } from "../steps/types.js";
-import { DAPPS, type Built } from "./dapps.js";
+import { FLOW_MAP, type Tx } from "./flows.js";
 import { assertChain } from "../evm.js";
-import { replayCalldata } from "../arkada/onchain.js";
-import { ranToday, markRan } from "../state.js";
+import { ranToday, markRan, saveStepState } from "../state.js";
 
-// Run each enabled ecosystem dApp action once per UTC day. Each is simulated
-// (eth_call) before broadcasting; a revert (e.g. fee/cooldown) is reported and
-// skipped without spending gas.
+// Execute each configured dApp flow. A flow is an ordered list of steps; each step
+// builds a sequence of txs (e.g. approve + action). Every tx is simulated (eth_call)
+// before broadcast — a revert (cooldown, no gas, ratio) is logged and skipped, the
+// rest continue. Gating: once = ever, daily = per UTC day, always = every run.
 export async function runEcosystem(ctx: Ctx): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  for (const key of ctx.cfg.ecosystem.dapps) {
-    const dapp = DAPPS[key];
-    if (!dapp) { out[key] = "unknown-dapp"; continue; }
-    if (ranToday(ctx.state, `eco:${key}`)) { out[key] = "daily-done"; continue; }
+  for (const dapp of ctx.cfg.ecosystem.dapps) {
+    const flow = FLOW_MAP[dapp];
+    if (!flow) { out[dapp] = "unknown-flow"; continue; }
+    for (const step of flow.steps) {
+      const tag = `${dapp}.${step.id}`;
+      const key = `flow:${dapp}:${step.id}`;
+      if (step.gate === "once" && ctx.state[key]?.done) { out[tag] = "done(once)"; continue; }
+      if (step.gate === "daily" && ranToday(ctx.state, key)) { out[tag] = "daily-done"; continue; }
 
-    let built: Built;
-    if (dapp.build) {
-      built = dapp.build(ctx.clients.address);
-    } else if (dapp.replay) {
-      const r = await replayCalldata(ctx.cfg.explorerApi, dapp.to, ctx.clients.address);
-      if (!r) { out[key] = "no-replay"; continue; }
-      built = { to: dapp.to, data: r.data, value: r.value };
-    } else { out[key] = "no-builder"; continue; }
-    const params = { account: ctx.clients.address, to: built.to, data: built.data, value: built.value };
-    try {
-      await ctx.clients.public.call(params);
-    } catch (e) {
-      out[key] = `revert:${((e as any).shortMessage ?? (e as Error).message).slice(0, 40)}`;
-      continue;
-    }
-    if (ctx.dryRun) { out[key] = "dry:ok"; continue; }
-    try {
-      await assertChain(ctx.clients.public);
-      const hash = await ctx.clients.wallet.sendTransaction({ ...params, account: ctx.clients.wallet.account });
-      const rcpt = await ctx.clients.public.waitForTransactionReceipt({ hash });
-      if (rcpt.status !== "success") { out[key] = "tx-reverted"; continue; }
-      markRan(ctx.acc.id, `eco:${key}`, { txs: [hash] });
-      out[key] = hash;
-      ctx.log(`${key}: ${hash}`);
-    } catch (e) {
-      out[key] = `send:${(e as Error).message.slice(0, 40)}`;
+      let txs: Tx[];
+      try { txs = await step.build({ address: ctx.clients.address, pub: ctx.clients.public }); }
+      catch (e) { out[tag] = `build-fail:${(e as Error).message.slice(0, 30)}`; continue; }
+      if (txs.length === 0) { out[tag] = "nothing"; if (step.gate === "daily") markRan(ctx.acc.id, key); continue; }
+
+      const hashes: string[] = [];
+      let okCount = 0, reverts = 0;
+      for (const tx of txs) {
+        const params = { account: ctx.clients.address, to: tx.to, data: tx.data, value: tx.value };
+        try { await ctx.clients.public.call(params); }
+        catch (e) { reverts++; ctx.log(`${tag}/${tx.label ?? ""}: revert ${((e as any).shortMessage ?? (e as Error).message).slice(0, 50)}`); continue; }
+        if (ctx.dryRun) { okCount++; continue; }
+        try {
+          await assertChain(ctx.clients.public);
+          const hash = await ctx.clients.wallet.sendTransaction({ ...params, account: ctx.clients.wallet.account });
+          const r = await ctx.clients.public.waitForTransactionReceipt({ hash });
+          if (r.status === "success") { okCount++; hashes.push(hash); ctx.log(`${tag}/${tx.label ?? ""}: ${hash}`); }
+          else reverts++;
+        } catch (e) { reverts++; ctx.log(`${tag}/${tx.label ?? ""}: send-fail ${(e as Error).message.slice(0, 40)}`); break; }
+      }
+
+      if (okCount > 0 && !ctx.dryRun) {
+        if (step.gate === "once") saveStepState(ctx.acc.id, key, { done: true, txs: hashes });
+        else if (step.gate === "daily") markRan(ctx.acc.id, key, { txs: hashes });
+      }
+      out[tag] = ctx.dryRun ? `dry(${okCount}/${txs.length})` : (hashes[0] ? `${hashes[0].slice(0, 12)}(${okCount}/${txs.length})` : `revert(${reverts})`);
     }
   }
   return out;

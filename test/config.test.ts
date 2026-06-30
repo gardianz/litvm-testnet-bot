@@ -22,7 +22,7 @@ describe("loadConfig", () => {
     expect(c.arkada.campaignPrefix).toBe("litvm");
     expect(c.steps.ecosystem).toBe(true);
     expect(c.steps.arkada).toBe(false);
-    expect(c.ecosystem.dapps).toContain("zns-register");
+    expect(c.ecosystem.dapps).toContain("zns");
     expect(c.questActions).toEqual({});
   });
   it("rejects unknown chainId", () => {
