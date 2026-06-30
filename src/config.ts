@@ -45,7 +45,10 @@ const ConfigSchema = z.object({
     signupChainId: z.number().int().default(CHAIN_ID),
     skipSocial: z.boolean().default(true),          // skip x.com/twitter/discord/t.me quests
     includeDaily: z.boolean().default(true),
-  }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true }),
+    onchain: z.boolean().default(true),             // fulfil on-chain quests by replaying a tx to the target contract
+    onchainMaxValueWei: z.string().default("50000000000000000"),  // 0.05 zkLTC cap per replayed tx (safety)
+    onchainMaxTx: z.number().int().positive().default(8),         // cap txs sent per quest
+  }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true, onchain: true, onchainMaxValueWei: "50000000000000000", onchainMaxTx: 8 }),
   questActions: z.record(z.string(), QuestActionSchema).default({}),
   steps: z.object({
     register: z.boolean().default(true),

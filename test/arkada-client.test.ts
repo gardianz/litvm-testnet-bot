@@ -13,7 +13,7 @@ describe("arkada client", () => {
   it("getQuests normalizes fields", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ quests: [{ id: "1", name: "Mint", quest_type: "link", link: "https://x", optional: false }] }) } as any);
     const qs = await getQuests(A, "litvm-lester", "t", fetchImpl);
-    expect(qs[0]).toMatchObject({ id: "1", slug: "litvm-lester", name: "Mint", type: "link", link: "https://x" });
+    expect(qs[0]).toMatchObject({ id: "1", slug: "litvm-lester", name: "Mint", type: "link", link: "https://x", targets: [], minCount: 1 });
   });
   it("checkQuest true on ok, false on 422", async () => {
     expect(await checkQuest(A, "1", "t", vi.fn().mockResolvedValueOnce({ ok: true } as any))).toBe(true);

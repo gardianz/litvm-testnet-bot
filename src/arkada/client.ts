@@ -1,6 +1,7 @@
 import type { Config } from "../config.js";
+import { parseChecks } from "./onchain.js";
 
-export type Quest = { id: string; slug: string; name: string; type: string; link: string; optional: boolean };
+export type Quest = { id: string; slug: string; name: string; type: string; link: string; optional: boolean; targets: string[]; minCount: number };
 type Ar = Config["arkada"];
 
 function H(token: string) {
@@ -25,14 +26,19 @@ export async function getQuests(arkada: Ar, slug: string, token: string, fetchIm
   if (!res.ok) return [];
   const j: any = await res.json().catch(() => ({}));
   const raw: any[] = j.quests ?? j.campaign?.quests ?? [];
-  return raw.map((q) => ({
-    id: String(q.id ?? ""),
-    slug,
-    name: String(q.name ?? q.title ?? ""),
-    type: String(q.quest_type ?? q.type ?? ""),
-    link: String(q.link ?? q.url ?? ""),
-    optional: q.optional === true,
-  }));
+  return raw.map((q) => {
+    const { targets, minCount } = parseChecks(q.value);
+    return {
+      id: String(q.id ?? ""),
+      slug,
+      name: String(q.name ?? q.title ?? ""),
+      type: String(q.quest_type ?? q.type ?? ""),
+      link: String(q.link ?? q.url ?? ""),
+      optional: q.optional === true,
+      targets,
+      minCount,
+    };
+  });
 }
 
 // POST /quests/check-quest {id} -> true when Arkada's monitor confirms the action (422 otherwise).
