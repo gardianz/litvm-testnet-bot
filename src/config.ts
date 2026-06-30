@@ -51,8 +51,8 @@ const ConfigSchema = z.object({
   }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true, onchain: true, onchainMaxValueWei: "50000000000000000", onchainMaxTx: 8 }),
   questActions: z.record(z.string(), QuestActionSchema).default({}),
   ecosystem: z.object({
-    dapps: z.array(z.string()).default(["onmi-createToken", "zns-register", "lester-mint", "lester-create", "drunkencats-swap", "omnihub-create"]),
-  }).default({ dapps: ["onmi-createToken", "zns-register", "lester-mint", "lester-create", "drunkencats-swap", "omnihub-create"] }),
+    dapps: z.array(z.string()).default(["onmi-createToken", "zns-register", "lester-mint", "lester-create", "drunkencats-swap", "omnihub-create", "litvmswap-wrap"]),
+  }).default({ dapps: ["onmi-createToken", "zns-register", "lester-mint", "lester-create", "drunkencats-swap", "omnihub-create", "litvmswap-wrap"] }),
   steps: z.object({
     register: z.boolean().default(false),
     faucet: z.boolean().default(true),

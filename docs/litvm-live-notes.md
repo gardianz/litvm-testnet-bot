@@ -148,3 +148,24 @@ Each runs once/UTC-day, simulate-guarded, chainId-4441 asserted before broadcast
 - **litvmswap** swap / **ayni** borrow — need ERC20 balances + approvals + market state
   (multi-step DeFi); replay reverts. Would need per-dApp token setup.
 - **midashand** markets — not yet mapped.
+
+## Ecosystem dApps — GENUINE actions (live tx hashes)
+All verified on-chain (real state changes), faucet-funded wallets:
+| dApp | action | how | live tx |
+|---|---|---|---|
+| onmi.fun | createToken (deploy) | verified ABI | 0xf661e6 / 0x906233 |
+| zns.bio | registerDomains .lit | verified sig (NFT mint to wallet) | 0xad65d0 / 0xee09db |
+| lester-labs | launch mint (ERC20 to wallet) | replay (mints to msg.sender) | 0x64521c / 0x84d094 |
+| lester-labs | create | replay | 0x16a42e / 0x6c24ef |
+| drunkencats | swap native->dcUSDT | verified V2 router swapExactNativeForTokens | 0x17f88f5b |
+| omnihub | create NFT collection (deploy) | verified OmniHubFactory.create(tuple) 0.02 | build-verified (gas-limited) |
+| litvmswap | wrap zkLTC->WzkLTC | WzkLTC.deposit() | 0xe4842cb3 |
+
+WzkLTC (wrapped native) = `0x9bFada6C2BDbA88129da349BF7568C76a750C495`.
+drunkencats router `0xAE92F4644Cc11f837dC4Be12B83D6FD4E887AFEE`, tokens dcXAU `0x023818c5…` dcUSDT `0x43F6117c…`.
+
+### Still not built (need ERC20 setup / gated)
+- ayni (AyniProtocol, verified): deposit/borrow need an ERC20 collateral token + approval (2-step). Tokens 0x60A84e.., 0x5adf10...
+- midashand prediction: needs market + token.
+- sweep.haus Lit_Pass: claim() needs a Merkle allowlist proof.
+- litvmswap/litdex aggregator token-swap (unverified routers): would need in-browser calldata capture (UI connect via injected EIP-6963 wallet) — drunkencats already covers real token swaps.

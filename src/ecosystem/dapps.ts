@@ -103,4 +103,15 @@ export const DAPPS: Record<string, Dapp> = {
       return { to: this.to, data, value: 20000000000000000n }; // 0.02 zkLTC
     },
   },
+
+  // litvmswap (litvmswap.com/swap) default route is zkLTC -> WzkLTC = wrap native.
+  // WzkLTC.deposit() payable. Real on-chain wrap, native-only, no approval.
+  "litvmswap-wrap": {
+    name: "litvmswap wrap (zkLTC->WzkLTC)",
+    to: "0x9bFada6C2BDbA88129da349BF7568C76a750C495",
+    build() {
+      const data = encodeFunctionData({ abi: parseAbi(["function deposit()"]), functionName: "deposit" });
+      return { to: this.to, data, value: 1000000000000000n }; // wrap 0.001 zkLTC
+    },
+  },
 };
