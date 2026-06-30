@@ -1,0 +1,4 @@
+# one proxy per line, mapped to accounts by index (line 1 -> account 1)
+# http://user:pass@host:port
+# socks5://user:pass@host:port
+# bare host:port is treated as http
