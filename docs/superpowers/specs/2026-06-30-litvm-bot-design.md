@@ -35,8 +35,20 @@ EVM-compatible → viem works out of the box.
   solve captcha with **2captcha** (`CAPTCHA_API_KEY`). Also tops up when balance
   < threshold. If the endpoint requires browser/social and cannot be driven from
   the backend, the step warns and skips (user funds manually).
-- **Scope:** register, faucet, deploy-token (lester-labs), onchaingm badge,
-  OmniHub mint, Multyra bridge, Aura Protocol. **Arkada skipped** (social-gated).
+- **Scope (revised):** three things — (1) register testnet.litvm.com, (2) claim
+  Caldera faucet daily, (3) complete the **Arkada** quest campaign for litvm
+  (`app.arkada.gg/en/quest-campaign/litvm`). Arkada aggregates every ecosystem
+  dApp quest (the map nodes: lester, onchaingm, omnihub, multyra, aura, zns, …).
+  User confirmed **no social (Discord/Twitter) connect required** — wallet
+  signature only.
+- **Arkada is NOT skipped** (reverses the earlier decision). The per-dApp steps
+  (deploy-token, mints, bridge, check-in) are no longer top-level pipeline steps;
+  they become **generic quest-action handlers** invoked by the quest runner.
+- **Arkada client = generic** (SIWE login + REST). Endpoints (auth/list/verify/
+  claim) are not public → resolved live and pinned into config; unknown quests
+  skip with a warning.
+- **Quest action = single generic contract-call handler** — `{address, fn, args,
+  value}` per quest slug from config. Covers any map node once its call is known.
 
 ## Architecture
 
@@ -61,17 +73,19 @@ src/
   quiet.ts         log helpers
   crypto.ts        accounts.json encrypt/decrypt
   balances.ts      per-account zkLTC balance read
+  siwe.ts          generic SIWE message builder + sign (shared by register + arkada)
+  arkada/
+    auth.ts        SIWE login to Arkada -> session token (endpoints from config)
+    client.ts      list campaign quests + status, verify(questId), claim(questId)
+    actions.ts     generic on-chain contract-call handler ({address,fn,args,value})
+    runner.ts      per-quest: action -> verify -> claim -> mark (skip if unknown)
   steps/
     types.ts       Step interface { name, shouldRun(ctx), run(ctx) }
     executor.ts    runs a step: shouldRun -> dryRun simulate | live broadcast -> state write
-    register.ts    task1: SIWE-style signature -> testnet.litvm.com API (discovered live)
-    faucet.ts      task2: claim zkLTC daily (2captcha)
-    deploy-token.ts task4: lester-labs Token Factory deploy (0.05 zkLTC)
-    onchaingm.ts   task3: claim LitVM badge mint
-    omnihub.ts     mint litvm-testnet NFT collection
-    multyra.ts     bridge zkLTC LiteForge<->Ethereum + test transfer
-    aura.ts        daily check-in / stake / vote (beta.auralaunch.org)
-abis/              erc20.json + per-contract ABIs (added as discovered)
+    register.ts    register testnet.litvm.com (SIWE -> API, discovered live)
+    faucet.ts      claim zkLTC daily (Caldera + 2captcha)
+    arkada-quests.ts  pipeline step wrapping arkada/runner over the litvm campaign
+abis/              erc20.json + generic-call ABIs (added as discovered)
 config.yaml        + config.example.yaml
 accounts.json      + accounts.example.json (gitignored)
 proxy.txt          + proxy.txt.example (gitignored)
@@ -85,28 +99,38 @@ docs/litvm-live-notes.md   verified addresses/endpoints + tx hashes
 Order (each step idempotent, skip-if-already-done):
 
 ```
-register -> faucet -> deploy-token -> onchaingm -> omnihub -> multyra -> aura
+register -> faucet -> arkada-quests
 ```
+
+The `arkada-quests` step: SIWE-login to Arkada, fetch the litvm campaign quest
+list + per-quest status, then for each incomplete quest run its configured
+on-chain action, call Arkada verify, then claim. Daily quests re-run each UTC day;
+one-time quests gate on Arkada-reported completion. Unknown quest slugs (no action
+mapping or unknown endpoints) skip with a warning — never a guessed tx.
 
 - **register** — once per account (state-gated, not daily). SIWE signature POST.
 - **faucet** — **daily** (date-gated per UTC day) + balance-triggered top-up.
-- **deploy-token** — daily (one token/day) or once, configurable.
-- **onchaingm / omnihub** — claim/mint once if not already held (read on-chain first).
-- **multyra** — bridge/transfer, gated by balance + cooldown.
-- **aura** — daily check-in always; stake/vote configurable.
+- **arkada-quests** — per UTC-day pass over the litvm campaign:
+  - Arkada SIWE login (cached session token per account).
+  - Fetch quest list + status; filter to incomplete (and daily quests not done today).
+  - For each: look up its action mapping in config (`questActions[slug]`). If present,
+    run the generic contract-call action (dryRun simulates only). Then POST Arkada
+    verify, then claim. Mark in state.
+  - No mapping or unknown endpoint → skip with warning.
 
-Every step reads on-chain or local state first and **skips when already done** →
-runs are resumable and safe to repeat.
+Every step reads on-chain / Arkada / local state first and **skips when already
+done** → runs are resumable and safe to repeat.
 
 ## Unknown contracts / endpoints
 
-Contract addresses and API routes for register, lester-labs factory, onchaingm,
-omnihub, multyra, aura are **not public**. `discover.ts` resolves them live from
-the explorer API (verified contracts + recent tx decode) during implementation.
-Confirmed values are pinned into `config.yaml` and recorded in
-`docs/litvm-live-notes.md` with tx hashes (same "verified live" model as forge).
-Anything that cannot be verified ships as a **skip-with-warning stub** — never a
-guessed transaction.
+Arkada's API routes (auth/list/verify/claim) and each quest's on-chain action
+(`{address, fn, args, value}`) are **not public**. They are resolved live —
+preferably by capturing the SPA network calls — and pinned into `config.yaml`
+(`arkada:` endpoints + `questActions:` map) and recorded in
+`docs/litvm-live-notes.md`. The bot ships with a **generic** Arkada client and a
+**generic** contract-call action; anything not yet mapped **skips with a warning**
+— never a guessed transaction. `discover.ts` (explorer ABI/tx helper) assists in
+identifying the right contract/selector for a quest.
 
 ## Safety
 
@@ -140,7 +164,9 @@ npm run schedule      # fixed daily cron
 
 ## Out of scope
 
-- Arkada quests (Discord/Twitter verification).
+- Any quest that genuinely requires Discord/Twitter OAuth (user confirmed the
+  litvm campaign needs none; if one appears, skip it with a warning).
+- Standalone per-dApp pipeline steps — folded into generic quest-action handlers.
 - Explorer "task" (read-only, nothing to automate).
 - Browser automation of any kind.
 - Mainnet (testnet only; chainId 4441 hard-asserted).
