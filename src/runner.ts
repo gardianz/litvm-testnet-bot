@@ -6,9 +6,10 @@ import { makeClients, assertChain } from "./evm.js";
 import { loadState } from "./state.js";
 import { registerStep } from "./steps/register.js";
 import { faucetStep } from "./steps/faucet.js";
+import { ecosystemStep } from "./steps/ecosystem.js";
 import { arkadaQuestsStep } from "./steps/arkada-quests.js";
 
-export const STEPS: Step[] = [registerStep, faucetStep, arkadaQuestsStep];
+export const STEPS: Step[] = [registerStep, faucetStep, ecosystemStep, arkadaQuestsStep];
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function runAccount(

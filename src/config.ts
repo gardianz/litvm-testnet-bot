@@ -50,11 +50,15 @@ const ConfigSchema = z.object({
     onchainMaxTx: z.number().int().positive().default(8),         // cap txs sent per quest
   }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true, onchain: true, onchainMaxValueWei: "50000000000000000", onchainMaxTx: 8 }),
   questActions: z.record(z.string(), QuestActionSchema).default({}),
+  ecosystem: z.object({
+    dapps: z.array(z.string()).default(["onmi-createToken", "zns-register"]),
+  }).default({ dapps: ["onmi-createToken", "zns-register"] }),
   steps: z.object({
-    register: z.boolean().default(true),
+    register: z.boolean().default(false),
     faucet: z.boolean().default(true),
-    arkada: z.boolean().default(true),
-  }).default({ register: true, faucet: true, arkada: true }),
+    arkada: z.boolean().default(false),     // Arkada reward needs Base mainnet gas — off by default
+    ecosystem: z.boolean().default(true),   // direct on-chain litVM ecosystem actions
+  }).default({ register: false, faucet: true, arkada: false, ecosystem: true }),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

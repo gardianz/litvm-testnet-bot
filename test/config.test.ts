@@ -18,10 +18,11 @@ describe("loadConfig", () => {
     expect(c.chainId).toBe(CHAIN_ID);
     expect(c.dryRun).toBe(true);
     expect(c.faucet.daily).toBe(true);
-    expect(c.arkada.enabled).toBe(true);
     expect(c.arkada.apiBase).toBe("https://app-api.arkada.gg");
     expect(c.arkada.campaignPrefix).toBe("litvm");
-    expect(c.steps.arkada).toBe(true);
+    expect(c.steps.ecosystem).toBe(true);
+    expect(c.steps.arkada).toBe(false);
+    expect(c.ecosystem.dapps).toContain("zns-register");
     expect(c.questActions).toEqual({});
   });
   it("rejects unknown chainId", () => {
