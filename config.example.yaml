@@ -1,0 +1,57 @@
+evmRpc: "https://liteforge.rpc.caldera.xyz/infra-partner-http"
+explorerApi: "https://liteforge.explorer.caldera.xyz"
+faucetUrl: "https://liteforge.hub.caldera.xyz/"
+chainId: 4441
+
+# testnet.litvm.com register API (discover live; see docs/litvm-live-notes.md)
+# registerApi: "https://api.testnet.litvm.com"
+
+# Caldera faucet HTTP endpoint + turnstile sitekey (discover live)
+# faucetEndpoint: "https://..."
+# faucetSitekey: "0x..."
+
+dryRun: true
+maxConcurrent: 1
+stepDelayMs: 3000
+accountDelayMs: 5000
+accountJitterMs: 15000
+questDelayMs: 4000
+proxyFile: "proxy.txt"
+proxyRpc: true
+scheduleCron: "0 9 * * *"
+daemon: { minHours: 22, maxHours: 26 }
+
+faucet:
+  daily: true
+  minGas: "0.01"
+  provider: "2captcha"
+
+arkada:
+  enabled: true
+  campaign: "litvm"
+  # discover from app.arkada.gg network tab (see docs/litvm-live-notes.md):
+  # apiBase: "https://api.arkada.gg"
+  # nonceRoute: "/auth/nonce"
+  # verifyLoginRoute: "/auth/verify"
+  # questsRoute: "/campaigns/litvm/quests"
+  # verifyRoute: "/quests/{id}/verify"
+  # claimRoute: "/quests/{id}/claim"
+
+# Map Arkada quest slug -> on-chain action. Fill as you identify each node.
+# Unmapped quests skip with a warning.
+questActions: {}
+#   onchaingm-gm:
+#     address: "0x..."
+#     signature: "function gm()"
+#     args: []
+#     valueWei: "0"
+#   lester-deploy:
+#     address: "0x..."        # token factory
+#     signature: "function createToken(string,string,uint256)"
+#     args: ["LitVM Test", "LVT", "1000000000000000000000000"]
+#     valueWei: "50000000000000000"   # 0.05 zkLTC
+
+steps:
+  register: true
+  faucet: true
+  arkada: true
