@@ -118,10 +118,30 @@ const omnihub: Flow = {
   ],
 };
 
-// ---- litvmswap: wrap native (zkLTC->WzkLTC). token-swap+LP need calldata capture (TODO). ----
+// ---- litvmswap: swap native->token (aggregator) + wrap->unwrap ----
+const EXPLORER = "https://liteforge.explorer.caldera.xyz";
+const LVS_ROUTER = "0xEb5600899BD87F0dF9200dEaD5B8098B63708C75" as const;
+// litvmswap router is an unverified V3-style aggregator: calldata carries a baked
+// route (bytes) + amountOutMin, recipient = msg.sender, NO deadline. Replay a recent
+// successful swap but zero amountOutMin (word[1]) so it can't revert on slippage.
+async function litvmswapSwapTx(selector: string): Promise<Tx | null> {
+  let it: any;
+  try {
+    const r = await fetch(`${EXPLORER}/api/v2/addresses/${LVS_ROUTER}/transactions?filter=to`, { signal: AbortSignal.timeout(15000) });
+    const j: any = await r.json();
+    it = (j.items ?? []).find((x: any) => x?.result === "success" && typeof x?.raw_input === "string" && x.raw_input.slice(0, 10) === selector);
+  } catch { return null; }
+  if (!it) return null;
+  const raw: string = it.raw_input;
+  const start = 10 + 64; // zero word[1] = amountOutMin
+  const data = (raw.slice(0, start) + "0".repeat(64) + raw.slice(start + 64)) as `0x${string}`;
+  return { to: LVS_ROUTER, data, value: BigInt(it.value ?? "0"), label: "litvmswap swap native->token" };
+}
+
 const litvmswap: Flow = {
   dapp: "litvmswap",
   steps: [
+    { id: "swap", gate: "daily", build: async () => { const t = await litvmswapSwapTx("0xce1e7030"); return t ? [t] : []; } },
     { id: "wrap", gate: "daily", build: async () => [
       { to: WZKLTC, value: SMALL, label: "wrap zkLTC->WzkLTC", data: enc("function deposit()", "deposit", []) },
     ] },
