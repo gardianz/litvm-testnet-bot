@@ -18,7 +18,8 @@
     "verify": "tsx tools/verify-deployment.ts",
     "faucet": "node tools/faucet-claim.mjs",
     "faucet:loop": "node tools/faucet-claim.mjs --loop",
-    "faucet:3h": "node tools/faucet-claim.mjs --loop --hours 3"
+    "faucet:3h": "node tools/faucet-claim.mjs --loop --hours 3",
+    "capture": "node tools/capture-browser.mjs"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

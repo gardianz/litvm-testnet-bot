@@ -7,3 +7,6 @@ state/
 logs/
 *.log
 *.bak
+.browser-profile/
+tools/metamask/
+captures.json

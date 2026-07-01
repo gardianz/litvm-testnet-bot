@@ -106,3 +106,21 @@ pm2 start "npm run daemon" --name litvm-bot && pm2 save
 npm test
 npm run typecheck
 ```
+
+## Capture calldata from a real browser — `npm run capture`
+
+For dApp flows on unverified contracts (litvmswap LP, lester launchpad) that need
+a real wallet connect, open a REAL Chromium window with your MetaMask and capture
+the exact calldata, then wire it into the bot.
+
+```bash
+# 1) download MetaMask (unpacked): github.com/MetaMask/metamask-extension/releases
+#    unzip metamask-chrome-<ver>.zip -> a folder with manifest.json
+# 2) needs a display: WSLg/X11 desktop, or on a headless VPS prefix with xvfb-run -a
+node tools/capture-browser.mjs https://www.litvmswap.com/swap /path/to/metamask
+```
+
+First run: set up MetaMask (import a farming wallet, add LitVM chainId 4441). Then
+connect + do the action + approve the popup — every `eth_sendTransaction` prints
+here and is saved to `captures.json`. Paste the `{to,data,value}` to wire the flow.
+The profile (`.browser-profile/`, holds your wallet) and `tools/metamask/` are gitignored.
