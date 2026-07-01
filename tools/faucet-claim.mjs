@@ -105,6 +105,8 @@ const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { 
 const rand = (a, b) => a + Math.random() * (b - a);
 
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], env: { ...process.env } });
+// Ctrl+C → close browser + exit (no orphan chromium, stops the loop immediately)
+for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => { browser.close().catch(() => {}).finally(() => process.exit(0)); });
 
 async function ensurePassed(page) {
   for (let i = 0; i < 5; i++) {

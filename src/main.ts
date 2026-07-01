@@ -68,6 +68,11 @@ async function main() {
   await runOnce();
 }
 
+// Ctrl+C / kill → exit immediately (don't wait on in-flight RPC / daemon timers).
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => { process.stdout.write("\x1b[?25h\n"); console.log("stopped."); process.exit(0); });
+}
+
 if (process.argv[1] && process.argv[1].endsWith("main.ts")) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }

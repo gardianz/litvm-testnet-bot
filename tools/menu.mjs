@@ -44,15 +44,18 @@ for (;;) {
   console.log(MENU);
   const c = (await ask("Pilih [0-8]: ")).trim();
   console.log("");
+  // run as a SINGLE node process (node --import tsx) — not `npm run`/`npx`, whose
+  // wrappers swallow SIGINT and leave the child running. Now Ctrl+C stops it.
+  const bot = "node --import tsx src/main.ts";
   if (c === "0" || c.toLowerCase() === "q") break;
-  else if (c === "1") { const n = (await ask("Jumlah wallet baru: ")).trim() || "1"; run(`npm run gen -- ${Number(n) || 1}`); }
-  else if (c === "2") run("npm run check");
-  else if (c === "3") run("npm run faucet");
+  else if (c === "1") { const n = (await ask("Jumlah wallet baru: ")).trim() || "1"; run(`${bot} --gen ${Number(n) || 1}`); }
+  else if (c === "2") run(`${bot} --check --no-dashboard`);
+  else if (c === "3") run("node tools/faucet-claim.mjs");
   else if (c === "4") { console.log(`${C.green}Faucet tiap 3 jam per akun (Ctrl+C untuk stop)${C.reset}`); run("node tools/faucet-claim.mjs --loop --hours 3"); }
   else if (c === "5") { const h = (await ask("Interval jam (mis. 2): ")).trim() || "3"; run(`node tools/faucet-claim.mjs --loop --hours ${Number(h) || 3}`); }
-  else if (c === "6") run("npm run bot:live");
-  else if (c === "7") { console.log(`${C.green}Daemon 24/7 LIVE (Ctrl+C untuk stop)${C.reset}`); run("npm run daemon"); }
-  else if (c === "8") run("npm run bot:dry");
+  else if (c === "6") run(`${bot} --no-dry-run`);
+  else if (c === "7") { console.log(`${C.green}Daemon 24/7 LIVE (Ctrl+C untuk stop)${C.reset}`); run(`${bot} --daemon`); }
+  else if (c === "8") run(`${bot} --dry-run`);
   else { console.log(`${C.yellow}Pilihan tidak valid.${C.reset}`); }
   if (c !== "0") await ask(`\n${C.dim}[Enter untuk kembali ke menu]${C.reset}`);
 }
