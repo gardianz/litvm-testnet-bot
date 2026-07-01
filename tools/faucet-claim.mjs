@@ -30,6 +30,7 @@ if (_exists(_libDir) && !(process.env.LD_LIBRARY_PATH || "").split(":").includes
   });
   process.exit(r.status ?? 0);
 }
+import "dotenv/config";
 import { load } from "js-yaml";
 import { chromium } from "playwright";
 import { createPublicClient, http, defineChain, isAddress } from "viem";
@@ -95,6 +96,9 @@ async function solveTurnstile() {
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 const LOOP = process.argv.includes("--loop");
+// fixed interval hours (e.g. --hours 3); default = random 1–3h per address
+const _hIdx = process.argv.indexOf("--hours");
+const FIXED_HOURS = _hIdx >= 0 ? Number(process.argv[_hIdx + 1]) : undefined;
 const FAUCET_STATE = "state/faucet.json";
 const loadFaucetState = () => { try { return JSON.parse(readFileSync(FAUCET_STATE, "utf8")); } catch { return {}; } };
 const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { recursive: true }); writeFileSync(FAUCET_STATE, JSON.stringify(s, null, 2)); };
@@ -137,7 +141,7 @@ if (!LOOP) {
   await browser.close();
 } else {
   // per-address random 1–3h scheduling, persisted across restarts, each via its own proxy
-  console.log(`faucet loop: ${entries.length} addresses, random 1–3h each${proxyList.length ? " (per-account proxy)" : ""}`);
+  console.log(`faucet loop: ${entries.length} addresses, ${FIXED_HOURS ? `every ${FIXED_HOURS}h` : "random 1–3h"} each${proxyList.length ? " (per-account proxy)" : ""}`);
   const st = loadFaucetState();
   for (;;) {
     const now = Date.now();
@@ -146,7 +150,7 @@ if (!LOOP) {
       if (now < next) continue;
       console.log(`[${new Date().toISOString()}] claiming ${e.address}`);
       await claimEntry(e).catch((err) => console.log("  err", err.message));
-      const gapH = rand(1, 3);
+      const gapH = FIXED_HOURS ?? rand(1, 3);
       st[e.address] = { nextTs: Date.now() + gapH * 3600_000, lastTry: Date.now() };
       saveFaucetState(st);
       console.log(`  next ${e.address.slice(0, 10)} in ${gapH.toFixed(2)}h`);

@@ -5,7 +5,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "tsx src/main.ts",
+    "start": "node tools/menu.mjs",
+    "menu": "node tools/menu.mjs",
     "bot": "tsx src/main.ts",
     "bot:dry": "tsx src/main.ts --dry-run",
     "bot:live": "tsx src/main.ts --no-dry-run",
@@ -16,7 +17,8 @@
     "discover": "tsx tools/discover.ts",
     "verify": "tsx tools/verify-deployment.ts",
     "faucet": "node tools/faucet-claim.mjs",
-    "faucet:loop": "node tools/faucet-claim.mjs --loop"
+    "faucet:loop": "node tools/faucet-claim.mjs --loop",
+    "faucet:3h": "node tools/faucet-claim.mjs --loop --hours 3"
   },
   "dependencies": {
     "crypto-js": "^4.2.0",

@@ -16,9 +16,18 @@ cp .env.example .env               # ACCOUNTS_KEY, CAPTCHA_API_KEY (2captcha), T
 cp proxy.txt.example proxy.txt     # optional
 npm run gen -- 5                   # generate 5 wallets into accounts.json
 
+# Easiest: interactive menu (pick from a list — no commands to memorise)
+npm start
+```
+
+Or run steps directly:
+
+```bash
 # 1) FUND wallets first (gas), then 2) run the ecosystem
 npm run faucet                     # one-shot: claim 0.1 zkLTC per wallet
+npm run faucet:3h                  # loop: claim every 3h per account (via proxy)
 npm run bot:live                   # run the ecosystem flows once
+npm run daemon                     # 24/7 live + dashboard
 ```
 
 Wallets with no gas make every step revert with "insufficient funds" — always
