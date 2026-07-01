@@ -54,7 +54,7 @@ questActions: {}
 #            onmi (createToken), zns (gm + register), omnihub (create + mint),
 #            litvmswap (wrap + unwrap).
 ecosystem:
-  dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap"]
+  dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester"]
 
 steps:
   register: false

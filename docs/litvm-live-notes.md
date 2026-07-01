@@ -175,3 +175,13 @@ drunkencats: faucet()x2, swap native->dcUSDT, addLiquidityNative, **openVault(1 
 onmi createToken. zns gm (0x779a220b, fee 0.004) + registerDomains .lit. omnihub create + **mint litvm-omnihub** (0xCe29a899, mint(0,1,0x0,[]) value 0.02). litvmswap wrap.
 - drunkencats VaultManager `0x7a1d18b9…` openVault(uint256 dcUSD) payable; min debt 1 dcUSD, MCR ~0.03 zkLTC/dcUSD.
 - omnihub litvm-omnihub collection `0xCe29a8993CE78E420BfC7646f4AEa90B42bFd9D9` (proxy), mint(uint256,uint256,address,bytes32[]) sel 0xa25ffea8 value 0.02; gate once.
+
+## litvmswap swap + lester (added)
+- **litvmswap swap** — router 0xEb5600 (unverified V3-style aggregator, selector 0xce1e7030):
+  calldata = baked route bytes + amountOutMin, recipient=msg.sender, NO deadline.
+  Replay a recent swap with word[1] (amountOutMin) zeroed → repeatable native->LITVMSWAP swap.
+  Router only ever does native->token (25/25 txs) → swap-back / addLiquidity not available there.
+- **lester** (all unverified): deploy 0xC9B196 (sel 0xe897ce99, ~0.03), mint 0x93acc6 (sel 0x1575ea57,
+  ~0.05), post/message 0xa37fF4 (sel 0xbaf9b369). Replay (sender substituted) → deploy/mint/post live.
+  presale / seed-liquidity / lock-LP thread the freshly-deployed token+LP address → stateful, NOT
+  replayable; would need each unverified fn's ABI + address threading (not done).

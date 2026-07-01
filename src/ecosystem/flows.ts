@@ -1,5 +1,6 @@
 import { parseAbi, encodeFunctionData, type PublicClient } from "viem";
 import { balanceOf, ensureAllowance } from "./erc20.js";
+import { replayCalldata } from "../arkada/onchain.js";
 
 export type Tx = { to: `0x${string}`; data: `0x${string}`; value: bigint; label?: string };
 export type FlowCtx = { address: `0x${string}`; pub: PublicClient };
@@ -153,10 +154,27 @@ const litvmswap: Flow = {
   ],
 };
 
-// ---- lester: token launcher via replay (full 6-step launchpad flow needs capture, TODO) ----
+// ---- lester-labs launchpad (all contracts unverified) ----
+// Feasible steps replay a recent successful call (sender substituted → credits us):
+//   deploy (token launch), mint, post-update (ledger message).
+// The stateful presale/seed-liquidity/lock-LP steps thread the freshly-deployed
+// token/LP address, so they can't be replayed — left out (see live-notes).
+const LESTER_DEPLOY = "0xC9B1961def0cC5bc1ffe3cFe37a4988D7987A43f" as const;
+const LESTER_MINT = "0x93acc61fcdc2e3407A0c03450Adfd8aE78964948" as const;
+const LESTER_MESSAGE = "0xa37fF4bAb59A5F861B48527A946C433dc1Ee8079" as const;
+const replayStep = (id: string, to: `0x${string}`, label: string): FlowStep => ({
+  id, gate: "daily", build: async ({ address }) => {
+    const r = await replayCalldata(EXPLORER, to, address);
+    return r ? [{ to, data: r.data, value: r.value, label }] : [];
+  },
+});
 const lester: Flow = {
   dapp: "lester",
-  steps: [], // replay-based actions handled separately; 6-step launchpad flow pending calldata capture
+  steps: [
+    replayStep("deploy", LESTER_DEPLOY, "lester deploy token"),
+    replayStep("mint", LESTER_MINT, "lester mint"),
+    replayStep("post", LESTER_MESSAGE, "lester post update"),
+  ],
 };
 
 export const FLOWS: Flow[] = [drunkencats, onmi, zns, omnihub, litvmswap, lester];
