@@ -7,16 +7,16 @@ const ADDR = "0x000000000000000000000000000000000000dEaD";
 describe("flows", () => {
   it("drunkencats has the full flow steps", () => {
     const ids = FLOW_MAP["drunkencats"].steps.map((s) => s.id);
-    expect(ids).toEqual(["faucet", "swap", "addLiquidity", "removeLiquidity"]);
+    expect(ids).toEqual(["faucet", "swap", "addLiquidity", "createVault", "removeLiquidity"]);
   });
   it("zns gm is daily, register is once", () => {
     const zns = FLOW_MAP["zns"];
     expect(zns.steps.find((s) => s.id === "gm")!.gate).toBe("daily");
     expect(zns.steps.find((s) => s.id === "register")!.gate).toBe("once");
   });
-  it("drunkencats faucet builds two no-value token faucet txs", async () => {
+  it("drunkencats faucet builds 5 no-value token faucet txs", async () => {
     const txs = await FLOW_MAP["drunkencats"].steps[0].build({ address: ADDR, pub: {} as any });
-    expect(txs.length).toBe(2);
+    expect(txs.length).toBe(5);
     expect(txs.every((t) => t.value === 0n)).toBe(true);
   });
 });

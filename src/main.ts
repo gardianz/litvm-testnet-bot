@@ -4,6 +4,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadConfig } from "./config.js";
 import { loadAccounts, appendAccounts, type Account } from "./accounts.js";
 import { loadProxies, proxyForIndex } from "./proxies.js";
+import { Dashboard } from "./dashboard.js";
 import { runAll } from "./runner.js";
 import { makeClients } from "./evm.js";
 import { getGas } from "./balances.js";
@@ -17,7 +18,9 @@ export function parseArgs(argv: string[]) {
   return {
     gen: has("--gen") ? Number(val("--gen") ?? "1") : undefined,
     check: has("--check"),
-    dryRun: has("--no-dry-run") ? false : true,
+    // undefined = use config.dryRun; --no-dry-run forces live; --dry-run forces dry
+    dryRun: has("--no-dry-run") ? false : has("--dry-run") ? true : undefined,
+    noDashboard: has("--no-dashboard"),
     daemon: has("--daemon"),
     schedule: has("--schedule"),
     only: val("--step"),
@@ -50,10 +53,13 @@ async function main() {
     return;
   }
 
+  const dryRun = args.dryRun ?? cfg.dryRun;   // CLI flag overrides; else config.dryRun
+  const dash = new Dashboard(!args.noDashboard, "LitVM ecosystem bot", !dryRun);
+
   const runOnce = async () => {
-    const results = await runAll(cfg, accounts, { dryRun: args.dryRun, only: args.only });
+    const results = await runAll(cfg, accounts, { dryRun, only: args.only, dash });
     const text = summarize(results);
-    console.log(text);
+    if (!dash.enabled) console.log(text);
     await sendTelegram(`LitVM bot run\n${text}`).catch(() => {});
   };
 
