@@ -8,7 +8,9 @@ auto faucet. Arkada is off by default (its reward claim needs Base-mainnet gas).
 
 ```bash
 npm install
-npx playwright install chromium   # for the faucet (headless browser); VPS also needs its libs
+npx playwright install chromium   # faucet browser binary
+# System libs for chromium are BUNDLED in browser-libs/ and auto-loaded (no sudo).
+# If you still hit a lib error, install system-wide: sudo apt install -y libnss3 libnspr4 libasound2
 cp config.example.yaml config.yaml
 cp .env.example .env               # ACCOUNTS_KEY, CAPTCHA_API_KEY (2captcha), TELEGRAM_*
 cp proxy.txt.example proxy.txt     # optional

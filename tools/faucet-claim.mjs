@@ -15,7 +15,21 @@
 // 2captcha key in CAPTCHA_API_KEY. Run on demand: `node tools/faucet-claim.mjs [accountId|0xaddr]`.
 
 import "dotenv/config";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync as _exists } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+// Bundled browser libs (libnspr4/libnss3/libasound2 …) so chromium launches on
+// hosts without sudo/system libs. LD_LIBRARY_PATH must be set at process start so
+// chromium AND its renderer/gpu subprocesses inherit it — so we re-exec node once.
+const _libDir = join(dirname(fileURLToPath(import.meta.url)), "..", "browser-libs");
+if (_exists(_libDir) && !(process.env.LD_LIBRARY_PATH || "").split(":").includes(_libDir)) {
+  const r = spawnSync(process.execPath, process.argv.slice(1), {
+    stdio: "inherit",
+    env: { ...process.env, LD_LIBRARY_PATH: `${_libDir}:${process.env.LD_LIBRARY_PATH || ""}` },
+  });
+  process.exit(r.status ?? 0);
+}
 import { load } from "js-yaml";
 import { chromium } from "playwright";
 import { createPublicClient, http, defineChain, isAddress } from "viem";
@@ -64,7 +78,7 @@ const loadFaucetState = () => { try { return JSON.parse(readFileSync(FAUCET_STAT
 const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { recursive: true }); writeFileSync(FAUCET_STATE, JSON.stringify(s, null, 2)); };
 const rand = (a, b) => a + Math.random() * (b - a);
 
-const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"] });
+const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], env: { ...process.env } });
 const ctx = await browser.newContext({ userAgent: UA });
 const page = await ctx.newPage();
 
