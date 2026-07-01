@@ -24,7 +24,8 @@ export async function runAccount(
   const clients = makeClients(cfg, acc);
   const dash = opts.dash;
   const log = dash?.enabled ? (m: string) => dash.log(`[${acc.id}] ${m}`) : (m: string) => console.log(`[${acc.id}] ${m}`);
-  const baseCtx: Ctx = { cfg, acc, clients, state: loadState(acc.id), log, dryRun: opts.dryRun };
+  const report = dash ? (key: string, status: string) => dash.setFlow(acc.id, key, status) : undefined;
+  const baseCtx: Ctx = { cfg, acc, clients, state: loadState(acc.id), log, dryRun: opts.dryRun, report };
   if (dash) { dash.ensure(acc.id); getGas(clients.public, clients.address).then((g) => dash.setGas(acc.id, formatEther(g))).catch(() => {}); }
   let chainOk = true;
   try { await assertChain(clients.public); } catch (e) { chainOk = false; log(`chain assert failed: ${(e as Error).message}`); }

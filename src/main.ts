@@ -54,7 +54,7 @@ async function main() {
   }
 
   const dryRun = args.dryRun ?? cfg.dryRun;   // CLI flag overrides; else config.dryRun
-  const dash = new Dashboard(!args.noDashboard, "LitVM ecosystem bot", !dryRun);
+  const dash = new Dashboard(!args.noDashboard, cfg.ecosystem.dapps, "LitVM ecosystem bot", !dryRun);
 
   const runOnce = async () => {
     const results = await runAll(cfg, accounts, { dryRun, only: args.only, dash });

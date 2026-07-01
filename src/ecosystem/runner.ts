@@ -15,13 +15,13 @@ export async function runEcosystem(ctx: Ctx): Promise<Record<string, string>> {
     for (const step of flow.steps) {
       const tag = `${dapp}.${step.id}`;
       const key = `flow:${dapp}:${step.id}`;
-      if (step.gate === "once" && ctx.state[key]?.done) { out[tag] = "done(once)"; continue; }
-      if (step.gate === "daily" && ranToday(ctx.state, key)) { out[tag] = "daily-done"; continue; }
+      if (step.gate === "once" && ctx.state[key]?.done) { out[tag] = "done(once)"; ctx.report?.(tag, out[tag]); continue; }
+      if (step.gate === "daily" && ranToday(ctx.state, key)) { out[tag] = "daily-done"; ctx.report?.(tag, out[tag]); continue; }
 
       let txs: Tx[];
       try { txs = await step.build({ address: ctx.clients.address, pub: ctx.clients.public }); }
-      catch (e) { out[tag] = `build-fail:${(e as Error).message.slice(0, 30)}`; continue; }
-      if (txs.length === 0) { out[tag] = "nothing"; if (step.gate === "daily") markRan(ctx.acc.id, key); continue; }
+      catch (e) { out[tag] = `build-fail:${(e as Error).message.slice(0, 30)}`; ctx.report?.(tag, out[tag]); continue; }
+      if (txs.length === 0) { out[tag] = "nothing"; if (step.gate === "daily") markRan(ctx.acc.id, key); ctx.report?.(tag, out[tag]); continue; }
 
       const hashes: string[] = [];
       let okCount = 0, reverts = 0;
@@ -44,6 +44,7 @@ export async function runEcosystem(ctx: Ctx): Promise<Record<string, string>> {
         else if (step.gate === "daily") markRan(ctx.acc.id, key, { txs: hashes });
       }
       out[tag] = ctx.dryRun ? `dry(${okCount}/${txs.length})` : (hashes[0] ? `${hashes[0].slice(0, 12)}(${okCount}/${txs.length})` : `revert(${reverts})`);
+      ctx.report?.(tag, out[tag]);
     }
   }
   return out;

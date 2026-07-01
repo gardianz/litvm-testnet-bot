@@ -11,6 +11,7 @@ export type Ctx = {
   state: Record<string, StepState>;
   log: (m: string) => void;
   dryRun: boolean;
+  report?: (key: string, status: string) => void;   // per-flow-step progress -> dashboard
 };
 
 export interface Step {
