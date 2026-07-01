@@ -18,6 +18,10 @@ const DC_ROUTER = "0xAE92F4644Cc11f837dC4Be12B83D6FD4E887AFEE" as const;
 const DC_FACTORY = "0x7D0FFa854edaE7659A1989Be42Df4CCe218F4c8C" as const;
 const DCUSDT = "0x43F6117cF64c0c19AC6072f68d010ab10acD224C" as const;
 const DCXAU = "0x023818c55233bdF400506703D27Dc91C7a04001f" as const;
+const DCUSDC = "0x61cbb9b7385229d50352e277ee032d7518f5f71f" as const;
+const DCETH = "0xcd44c7c7bc71f77e752bf4c27174c349becd5fc4" as const;
+const DCBTC = "0x5b2db9d80be46019baeaad41ad94c3af5e155245" as const;
+const DC_TOKENS = [DCUSDC, DCUSDT, DCETH, DCBTC, DCXAU] as const; // all faucet() TestERC20
 const SMALL = 500000000000000n; // 0.0005 zkLTC — small, won't drain
 
 const FACTORY_ABI = parseAbi(["function getPair(address,address) view returns (address)"]);
@@ -25,10 +29,8 @@ const FACTORY_ABI = parseAbi(["function getPair(address,address) view returns (a
 const drunkencats: Flow = {
   dapp: "drunkencats",
   steps: [
-    { id: "faucet", gate: "daily", build: async () => [
-      { to: DCUSDT, data: enc("function faucet()", "faucet", []), value: 0n, label: "dcUSDT.faucet" },
-      { to: DCXAU, data: enc("function faucet()", "faucet", []), value: 0n, label: "dcXAU.faucet" },
-    ] },
+    { id: "faucet", gate: "daily", build: async () =>
+      DC_TOKENS.map((t) => ({ to: t, data: enc("function faucet()", "faucet", []), value: 0n, label: `faucet ${t.slice(0, 8)}` })) },
     { id: "swap", gate: "daily", build: async ({ address }) => [
       { to: DC_ROUTER, value: SMALL, label: "swap native->dcUSDT",
         data: enc("function swapExactNativeForTokens(uint256,address[],address,uint256)", "swapExactNativeForTokens", [0n, [WZKLTC, DCUSDT], address, dl()]) },
@@ -119,9 +121,16 @@ const omnihub: Flow = {
 // ---- litvmswap: wrap native (zkLTC->WzkLTC). token-swap+LP need calldata capture (TODO). ----
 const litvmswap: Flow = {
   dapp: "litvmswap",
-  steps: [{ id: "wrap", gate: "daily", build: async () => [
-    { to: WZKLTC, value: SMALL, label: "wrap zkLTC->WzkLTC", data: enc("function deposit()", "deposit", []) },
-  ] }],
+  steps: [
+    { id: "wrap", gate: "daily", build: async () => [
+      { to: WZKLTC, value: SMALL, label: "wrap zkLTC->WzkLTC", data: enc("function deposit()", "deposit", []) },
+    ] },
+    { id: "unwrap", gate: "daily", build: async ({ address, pub }) => {
+      const bal = await balanceOf(pub, WZKLTC, address);
+      if (bal === 0n) return [];
+      return [{ to: WZKLTC, value: 0n, label: "unwrap all WzkLTC->zkLTC", data: enc("function withdraw(uint256)", "withdraw", [bal]) }];
+    } },
+  ],
 };
 
 // ---- lester: token launcher via replay (full 6-step launchpad flow needs capture, TODO) ----
