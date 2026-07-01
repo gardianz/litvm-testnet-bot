@@ -27,7 +27,7 @@ const ConfigSchema = z.object({
   accountJitterMs: z.number().int().nonnegative().default(15000),
   questDelayMs: z.number().int().nonnegative().default(4000),
   proxyFile: z.string().default("proxy.txt"),
-  proxyRpc: z.boolean().default(false),
+  proxyRpc: z.boolean().default(true),
   scheduleCron: z.string().default("0 9 * * *"),
   daemon: z.object({
     minHours: z.number().positive().default(22),
