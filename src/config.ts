@@ -55,10 +55,10 @@ const ConfigSchema = z.object({
   }).default({ dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap"] }),
   steps: z.object({
     register: z.boolean().default(false),
-    faucet: z.boolean().default(true),
+    faucet: z.boolean().default(false),     // gas comes from `npm run faucet`/`faucet:loop` (browser). HTTP step disabled.
     arkada: z.boolean().default(false),     // Arkada reward needs Base mainnet gas — off by default
     ecosystem: z.boolean().default(true),   // direct on-chain litVM ecosystem actions
-  }).default({ register: false, faucet: true, arkada: false, ecosystem: true }),
+  }).default({ register: false, faucet: false, arkada: false, ecosystem: true }),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

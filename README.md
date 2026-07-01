@@ -1,36 +1,40 @@
 # LitVM LiteForge Testnet Bot
 
-Backend-only, multi-account daily bot for LitVM LiteForge testnet (chainId 4441).
-No browser. Pipeline: **register → faucet (daily) → arkada-quests**.
+Multi-account daily bot for LitVM LiteForge testnet (chainId 4441). Does **real
+on-chain actions** on the litVM ecosystem dApps (all live-verified), plus an
+auto faucet. Arkada is off by default (its reward claim needs Base-mainnet gas).
 
-## Setup
+## Setup (order matters)
 
 ```bash
 npm install
+npx playwright install chromium   # for the faucet (headless browser); VPS also needs its libs
 cp config.example.yaml config.yaml
-cp .env.example .env            # ACCOUNTS_KEY, CAPTCHA_API_KEY, TELEGRAM_*
-cp proxy.txt.example proxy.txt  # optional
-npm run gen -- 5                # generate 5 wallets into accounts.json
+cp .env.example .env               # ACCOUNTS_KEY, CAPTCHA_API_KEY (2captcha), TELEGRAM_*
+cp proxy.txt.example proxy.txt     # optional
+npm run gen -- 5                   # generate 5 wallets into accounts.json
+
+# 1) FUND wallets first (gas), then 2) run the ecosystem
+npm run faucet                     # one-shot: claim 0.1 zkLTC per wallet
+npm run bot:live                   # run the ecosystem flows once
 ```
 
-## Arkada — works out of the box
+Wallets with no gas make every step revert with "insufficient funds" — always
+faucet before `bot:live`.
 
-The Arkada API is **live-verified and pre-wired** (`app-api.arkada.gg`): the bot
-logs in via wallet signature, lists every `litvm-*` campaign, and claims each
-quest. `quest_type=link` quests claim directly; social (X/Discord/Telegram)
-quests are skipped. `-daily` campaigns re-run each UTC day. No config needed.
+## Ecosystem flows (real on-chain, live-verified)
 
-Tune in `config.yaml` under `arkada:` (`campaignPrefix`, `skipSocial`,
-`includeDaily`). Verified live: one run claimed 34 litvm quests for a wallet.
+Per UTC-day (small values, once/daily gated, each tx simulate-guarded):
 
-### Optional: on-chain quests, faucet, register
+- **drunkencats** — faucet() all 5 test tokens → swap (native→dcUSDT) → add
+  liquidity → open vault (once) → remove liquidity (leave ~10%)
+- **onmi** — createToken
+- **zns** — gm (daily) + register .lit domain (once)
+- **omnihub** — create collection + mint litvm-omnihub (once)
+- **litvmswap** — wrap (zkLTC→WzkLTC) → unwrap all
 
-- Some quests want a real on-chain tx before Arkada credits them. Map them in
-  `questActions[<questId|slug>]` (`address`, `signature`, `args`, `valueWei`) —
-  use `npm run discover -- <addr>` to confirm the contract fn. Unmapped on-chain
-  quests are reported `unmapped` (no guessed tx).
-- Register (`registerApi`) is behind the SPA; capture from the Network tab if you
-  want it, else skip (Arkada's litvm-arkada "Verify Wallet" covers the portal need).
+Configure which run in `config.yaml` `ecosystem.dapps`. See `docs/litvm-live-notes.md`
+for every contract address + decoded call.
 
 ## Faucet (gas) — `npm run faucet`
 

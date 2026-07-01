@@ -49,13 +49,15 @@ questActions: {}
 #     args: []
 #     valueWei: "0"
 
-# Direct on-chain litVM ecosystem actions (no Arkada). Each runs once per UTC day.
-# Available: onmi-createToken, zns-register, lester-mint, lester-create
+# Direct on-chain litVM ecosystem flows (no Arkada). Multi-step, gated once/daily.
+# Available: drunkencats (5-token faucet, swap, addLiq, vault, removeLiq),
+#            onmi (createToken), zns (gm + register), omnihub (create + mint),
+#            litvmswap (wrap + unwrap).
 ecosystem:
   dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap"]
 
 steps:
   register: false
-  faucet: true            # gas: run `npm run faucet` (browser+2captcha) on demand; daemon step skips if no endpoint
+  faucet: false           # gas via npm run faucet / faucet:loop (browser). HTTP step off.
   arkada: false           # Arkada reward needs Base mainnet gas — disabled
   ecosystem: true
