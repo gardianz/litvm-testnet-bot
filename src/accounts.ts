@@ -13,7 +13,9 @@ export function loadAccounts(path = "accounts.json", key?: string): Account[] {
   return parsed as Account[];
 }
 
-export function appendAccounts(path = "accounts.json", n: number, key?: string): Account[] {
+// key decrypts an existing (encrypted) file on read; the file is written encrypted
+// only when doEncrypt is true (opt-in). Otherwise it stays plain, readable JSON.
+export function appendAccounts(path = "accounts.json", n: number, key?: string, doEncrypt = false): Account[] {
   let existing: Account[] = [];
   if (existsSync(path)) existing = loadAccounts(path, key);
   const created: Account[] = [];
@@ -22,6 +24,7 @@ export function appendAccounts(path = "accounts.json", n: number, key?: string):
     created.push({ id: `acc${existing.length + i + 1}`, pk: w.privateKey });
   }
   const all = [...existing, ...created];
-  writeFileSync(path, key ? JSON.stringify(encrypt(JSON.stringify(all), key)) : JSON.stringify(all, null, 2));
+  const enc = doEncrypt && key;
+  writeFileSync(path, enc ? JSON.stringify(encrypt(JSON.stringify(all), key)) : JSON.stringify(all, null, 2));
   return created;
 }

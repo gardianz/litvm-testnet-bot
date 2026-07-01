@@ -33,7 +33,9 @@ async function main() {
   const key = process.env.ACCOUNTS_KEY;
 
   if (args.gen !== undefined) {
-    for (const a of appendAccounts("accounts.json", args.gen, key)) console.log(`${a.id}: ${privateKeyToAccount(a.pk).address}`);
+    let doEncrypt = false;
+    try { doEncrypt = loadConfig().encryptAccounts; } catch { /* config.yaml may not exist yet */ }
+    for (const a of appendAccounts("accounts.json", args.gen, key, doEncrypt)) console.log(`${a.id}: ${privateKeyToAccount(a.pk).address}`);
     return;
   }
 

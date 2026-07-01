@@ -18,6 +18,7 @@ accountJitterMs: 15000
 questDelayMs: 4000
 proxyFile: "proxy.txt"
 proxyRpc: true
+encryptAccounts: false   # true = encrypt accounts.json with ACCOUNTS_KEY; false = plain readable
 scheduleCron: "0 9 * * *"
 daemon: { minHours: 22, maxHours: 26 }
 

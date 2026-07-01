@@ -28,6 +28,7 @@ const ConfigSchema = z.object({
   questDelayMs: z.number().int().nonnegative().default(4000),
   proxyFile: z.string().default("proxy.txt"),
   proxyRpc: z.boolean().default(true),
+  encryptAccounts: z.boolean().default(false),   // encrypt accounts.json with ACCOUNTS_KEY (default: plain readable JSON)
   scheduleCron: z.string().default("0 9 * * *"),
   daemon: z.object({
     minHours: z.number().positive().default(22),
