@@ -17,7 +17,7 @@ accountDelayMs: 5000
 accountJitterMs: 15000
 questDelayMs: 4000
 proxyFile: "proxy.txt"
-proxyRpc: true
+proxyRpc: false
 scheduleCron: "0 9 * * *"
 daemon: { minHours: 22, maxHours: 26 }
 
