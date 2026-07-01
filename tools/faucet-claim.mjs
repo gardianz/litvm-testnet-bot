@@ -62,8 +62,10 @@ function parseProxy(str) {
   } catch { return undefined; }
 }
 
-// resolve entries [{address, proxy}]: arg = accountId or 0xaddr; default = all accounts
-const arg = process.argv[2];
+// resolve entries [{address, proxy}]: arg = accountId or 0xaddr; default = all accounts.
+// pick the first POSITIONAL arg (skip --loop / --hours <n> flags).
+const _argv = process.argv.slice(2);
+const arg = _argv.find((a, i) => !a.startsWith("--") && _argv[i - 1] !== "--hours");
 const allAccounts = JSON.parse(readFileSync("accounts.json", "utf8"));
 const proxyList = loadProxies(cfg.proxyFile || "proxy.txt");
 let entries;
