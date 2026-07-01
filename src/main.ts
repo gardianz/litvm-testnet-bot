@@ -3,6 +3,7 @@ import { formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadConfig } from "./config.js";
 import { loadAccounts, appendAccounts, type Account } from "./accounts.js";
+import { loadProxies, proxyForIndex } from "./proxies.js";
 import { runAll } from "./runner.js";
 import { makeClients } from "./evm.js";
 import { getGas } from "./balances.js";
@@ -35,6 +36,9 @@ async function main() {
 
   const cfg = loadConfig();
   let accounts = loadAccounts("accounts.json", key);
+  // map proxy.txt to accounts by index (line 1 -> account 1); overrides accounts.json proxy field
+  const proxies = loadProxies(cfg.proxyFile);
+  accounts = accounts.map((a: Account, i: number) => ({ ...a, proxy: proxyForIndex(proxies, i) ?? a.proxy }));
   if (args.account) accounts = accounts.filter((a: Account) => a.id === args.account);
 
   if (args.check) {

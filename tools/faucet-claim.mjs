@@ -44,16 +44,38 @@ const cfg = load(readFileSync("config.yaml", "utf8"));
 const apiKey = process.env.CAPTCHA_API_KEY;
 if (!apiKey) { console.error("CAPTCHA_API_KEY unset (.env)"); process.exit(1); }
 
-// resolve recipient list: arg = accountId or 0xaddr; default = all accounts
-const arg = process.argv[2];
-let recipients;
-if (arg && isAddress(arg)) recipients = [arg];
-else {
-  const accounts = JSON.parse(readFileSync("accounts.json", "utf8"));
-  const picked = arg ? accounts.filter((a) => a.id === arg) : accounts;
-  recipients = picked.map((a) => privateKeyToAccount(a.pk).address);
+// proxy.txt (one per line, mapped to accounts by index) — each account claims via its own proxy
+function loadProxies(path) {
+  if (!_exists(path)) return [];
+  return readFileSync(path, "utf8").split("\n").map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"))
+    .map((l) => (/^(https?|socks\d?):\/\//.test(l) ? l : `http://${l}`));
 }
-if (!recipients.length) { console.error("no recipients"); process.exit(1); }
+// playwright proxy object from a proxy URL (http://user:pass@host:port / socks5://…)
+function parseProxy(str) {
+  if (!str) return undefined;
+  try {
+    const u = new URL(str);
+    const server = `${u.protocol}//${u.host}`;
+    return u.username ? { server, username: decodeURIComponent(u.username), password: decodeURIComponent(u.password) } : { server };
+  } catch { return undefined; }
+}
+
+// resolve entries [{address, proxy}]: arg = accountId or 0xaddr; default = all accounts
+const arg = process.argv[2];
+const allAccounts = JSON.parse(readFileSync("accounts.json", "utf8"));
+const proxyList = loadProxies(cfg.proxyFile || "proxy.txt");
+let entries;
+if (arg && isAddress(arg)) {
+  entries = [{ address: arg, proxy: undefined }];
+} else {
+  const picked = arg ? allAccounts.filter((a) => a.id === arg) : allAccounts;
+  entries = picked.map((a) => {
+    const idx = allAccounts.indexOf(a);
+    return { address: privateKeyToAccount(a.pk).address, proxy: parseProxy(a.proxy || proxyList[idx]) };
+  });
+}
+if (!entries.length) { console.error("no recipients"); process.exit(1); }
 
 const chain = defineChain({ id: 4441, name: "LiteForge", nativeCurrency: { name: "zkLTC", symbol: "zkLTC", decimals: 18 }, rpcUrls: { default: { http: [cfg.evmRpc] } } });
 const pub = createPublicClient({ chain, transport: http(cfg.evmRpc) });
@@ -79,10 +101,8 @@ const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { 
 const rand = (a, b) => a + Math.random() * (b - a);
 
 const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], env: { ...process.env } });
-const ctx = await browser.newContext({ userAgent: UA });
-const page = await ctx.newPage();
 
-async function ensurePassed() {
+async function ensurePassed(page) {
   for (let i = 0; i < 5; i++) {
     if ((await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet")) return true;
     await page.goto(HUB, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
@@ -91,40 +111,45 @@ async function ensurePassed() {
   return (await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet");
 }
 
-async function claimOne(addr) {
-  if (!(await ensurePassed())) { console.log("  checkpoint not passed"); return false; }
-  let token;
-  try { token = await solveTurnstile(); } catch (e) { console.log("  captcha fail:", e.message); return false; }
-  const r = await page.evaluate(async ({ rollup, addr, token }) => {
-    const res = await fetch(`/api/trpc/hub.requestFaucetFunds?batch=1`, {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ 0: { json: { rollupSubdomain: rollup, recipientAddress: addr, turnstileToken: token } } }),
-    });
-    return { s: res.status, t: await res.text() };
-  }, { rollup: ROLLUP, addr, token });
-  let ok = false; try { ok = JSON.parse(r.t)[0].result.data.json.success === true; } catch {}
-  console.log(`  ${addr} claim [${r.s}] ${ok ? "OK +0.1" : r.t.slice(0, 120)}`);
-  return ok;
+// each entry claims through its OWN proxied context (own IP) to avoid faucet rate-limits
+async function claimEntry(entry) {
+  const ctx = await browser.newContext({ userAgent: UA, ...(entry.proxy ? { proxy: entry.proxy } : {}) });
+  try {
+    const page = await ctx.newPage();
+    if (!(await ensurePassed(page))) { console.log(`  ${entry.address} checkpoint not passed`); return false; }
+    let token;
+    try { token = await solveTurnstile(); } catch (e) { console.log("  captcha fail:", e.message); return false; }
+    const r = await page.evaluate(async ({ rollup, addr, token }) => {
+      const res = await fetch(`/api/trpc/hub.requestFaucetFunds?batch=1`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ 0: { json: { rollupSubdomain: rollup, recipientAddress: addr, turnstileToken: token } } }),
+      });
+      return { s: res.status, t: await res.text() };
+    }, { rollup: ROLLUP, addr: entry.address, token });
+    let ok = false; try { ok = JSON.parse(r.t)[0].result.data.json.success === true; } catch {}
+    console.log(`  ${entry.address} ${entry.proxy ? "[proxy]" : "[no-proxy]"} claim [${r.s}] ${ok ? "OK +0.1" : r.t.slice(0, 120)}`);
+    return ok;
+  } finally { await ctx.close(); }
 }
 
 if (!LOOP) {
-  for (const addr of recipients) { console.log(`\n${addr}`); await claimOne(addr); await sleep(4000); }
+  for (const e of entries) { console.log(`\n${e.address}`); await claimEntry(e).catch((err) => console.log("  err", err.message)); await sleep(4000); }
   await browser.close();
 } else {
-  // per-address random 1–3h scheduling, persisted across restarts
-  console.log(`faucet loop: ${recipients.length} addresses, random 1–3h each`);
+  // per-address random 1–3h scheduling, persisted across restarts, each via its own proxy
+  console.log(`faucet loop: ${entries.length} addresses, random 1–3h each${proxyList.length ? " (per-account proxy)" : ""}`);
   const st = loadFaucetState();
   for (;;) {
     const now = Date.now();
-    for (const addr of recipients) {
-      const next = st[addr]?.nextTs ?? 0;
+    for (const e of entries) {
+      const next = st[e.address]?.nextTs ?? 0;
       if (now < next) continue;
-      console.log(`[${new Date().toISOString()}] claiming ${addr}`);
-      await claimOne(addr).catch((e) => console.log("  err", e.message));
+      console.log(`[${new Date().toISOString()}] claiming ${e.address}`);
+      await claimEntry(e).catch((err) => console.log("  err", err.message));
       const gapH = rand(1, 3);
-      st[addr] = { nextTs: Date.now() + gapH * 3600_000, lastTry: Date.now() };
+      st[e.address] = { nextTs: Date.now() + gapH * 3600_000, lastTry: Date.now() };
       saveFaucetState(st);
-      console.log(`  next ${addr.slice(0, 10)} in ${gapH.toFixed(2)}h`);
+      console.log(`  next ${e.address.slice(0, 10)} in ${gapH.toFixed(2)}h`);
       await sleep(5000);
     }
     await sleep(60_000); // poll every minute
