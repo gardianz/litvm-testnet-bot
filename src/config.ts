@@ -52,8 +52,8 @@ const ConfigSchema = z.object({
   }).default({ enabled: true, apiBase: "https://app-api.arkada.gg", campaignPrefix: "litvm", signupChainId: CHAIN_ID, skipSocial: true, includeDaily: true, onchain: true, onchainMaxValueWei: "50000000000000000", onchainMaxTx: 8 }),
   questActions: z.record(z.string(), QuestActionSchema).default({}),
   ecosystem: z.object({
-    dapps: z.array(z.string()).default(["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester"]),
-  }).default({ dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester"] }),
+    dapps: z.array(z.string()).default(["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester", "aura"]),
+  }).default({ dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester", "aura"] }),
   steps: z.object({
     register: z.boolean().default(false),
     faucet: z.boolean().default(false),     // gas comes from `npm run faucet`/`faucet:loop` (browser). HTTP step disabled.

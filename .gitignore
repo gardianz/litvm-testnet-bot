@@ -10,3 +10,4 @@ logs/
 .browser-profile/
 tools/metamask/
 captures.json
+.pr-profile/

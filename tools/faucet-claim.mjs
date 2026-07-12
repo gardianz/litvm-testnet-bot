@@ -19,20 +19,31 @@ import { readFileSync, existsSync as _exists } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
-// Bundled browser libs (libnspr4/libnss3/libasound2 …) so chromium launches on
-// hosts without sudo/system libs. LD_LIBRARY_PATH must be set at process start so
-// chromium AND its renderer/gpu subprocesses inherit it — so we re-exec node once.
+// Bootstrap (re-exec once): (1) bundled chromium libs (libnspr4/libnss3/…) on LD_LIBRARY_PATH
+// so chromium + its renderer/gpu subprocesses inherit them; (2) a DISPLAY for headful patchright.
+// patchright must run HEADFUL to beat the Turnstile automation check — true headless doesn't
+// auto-solve. On a headless VPS we auto-wrap with `xvfb-run` (virtual framebuffer: no GUI, still
+// fully server-side). WSLg/desktop already has DISPLAY, so it runs headful directly.
 const _libDir = join(dirname(fileURLToPath(import.meta.url)), "..", "browser-libs");
-if (_exists(_libDir) && !(process.env.LD_LIBRARY_PATH || "").split(":").includes(_libDir)) {
-  const r = spawnSync(process.execPath, process.argv.slice(1), {
-    stdio: "inherit",
-    env: { ...process.env, LD_LIBRARY_PATH: `${_libDir}:${process.env.LD_LIBRARY_PATH || ""}` },
-  });
+const _needLib = _exists(_libDir) && !(process.env.LD_LIBRARY_PATH || "").split(":").includes(_libDir);
+const _needXvfb = process.env.FAUCET_HEADLESS !== "1" && !process.env.DISPLAY && !process.env.__XVFB
+  && spawnSync("sh", ["-c", "command -v xvfb-run"]).status === 0;
+if (_needLib || _needXvfb) {
+  const env = { ...process.env, LD_LIBRARY_PATH: `${_libDir}:${process.env.LD_LIBRARY_PATH || ""}`, __XVFB: "1" };
+  const node = [process.execPath, ...process.argv.slice(1)];
+  const r = _needXvfb
+    ? spawnSync("xvfb-run", ["-a", "--server-args=-screen 0 1280x1024x24", ...node], { stdio: "inherit", env })
+    : spawnSync(node[0], node.slice(1), { stdio: "inherit", env });
   process.exit(r.status ?? 0);
 }
 import "dotenv/config";
 import { load } from "js-yaml";
-import { chromium } from "playwright";
+// patchright = undetected playwright. It defeats the Turnstile automation check, so the hub's
+// OWN widget auto-issues a token (read from the hidden cf-turnstile-response input) — NO 2captcha.
+// Requires a real display: works headful on WSLg/desktop; on a headless VPS wrap with `xvfb-run -a`.
+import { chromium } from "patchright";
+import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { createPublicClient, http, defineChain, isAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -42,8 +53,9 @@ const ROLLUP = "liteforge";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 const cfg = load(readFileSync("config.yaml", "utf8"));
-const apiKey = process.env.CAPTCHA_API_KEY;
-if (!apiKey) { console.error("CAPTCHA_API_KEY unset (.env)"); process.exit(1); }
+const apiKey = process.env.CAPTCHA_API_KEY;   // optional now — only a fallback if self-solve fails
+// patchright needs a real display: default headful; VPS → `xvfb-run -a`. FAUCET_HEADLESS=1 to force.
+const HEADLESS = process.env.FAUCET_HEADLESS === "1";
 
 // proxy.txt (one per line, mapped to accounts by index) — each account claims via its own proxy
 function loadProxies(path) {
@@ -106,9 +118,9 @@ const loadFaucetState = () => { try { return JSON.parse(readFileSync(FAUCET_STAT
 const saveFaucetState = (s) => { if (!existsSync("state")) mkdirSync("state", { recursive: true }); writeFileSync(FAUCET_STATE, JSON.stringify(s, null, 2)); };
 const rand = (a, b) => a + Math.random() * (b - a);
 
-const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"], env: { ...process.env } });
-// Ctrl+C → close browser + exit (no orphan chromium, stops the loop immediately)
-for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => { browser.close().catch(() => {}).finally(() => process.exit(0)); });
+// patchright runs headful (bootstrap gave it a display: WSLg's, or an auto-xvfb one on a VPS).
+let activeCtx = null;
+for (const s of ["SIGINT", "SIGTERM"]) process.on(s, () => { activeCtx?.close().catch(() => {}).finally(() => process.exit(0)); });
 
 async function ensurePassed(page) {
   for (let i = 0; i < 5; i++) {
@@ -119,14 +131,60 @@ async function ensurePassed(page) {
   return (await page.evaluate(() => document.body.innerText).catch(() => "")).includes("Faucet");
 }
 
-// each entry claims through its OWN proxied context (own IP) to avoid faucet rate-limits
+// read the hub's OWN auto-issued Turnstile token from the hidden cf-turnstile-response input.
+// patchright makes the managed widget self-solve, so this needs no 2captcha. Poll until populated.
+async function readSelfSolvedToken(page, ms = 45000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = await page.evaluate(() => document.querySelector('input[name="cf-turnstile-response"]')?.value || "").catch(() => "");
+    if (v && v.length > 20) return v;
+    await page.waitForTimeout(2000);
+  }
+  return "";
+}
+
+// low-RAM flags that DON'T touch GPU/WebGL/process-model (those are Turnstile-fingerprinted —
+// --disable-gpu / --renderer-process-limit=1 can break the self-solve, so they're left out).
+const MEM_FLAGS = [
+  "--no-sandbox", "--disable-dev-shm-usage",
+  "--js-flags=--max-old-space-size=512", // cap V8 heap per process
+  "--disable-extensions", "--disable-background-networking", "--disable-component-update",
+  "--disable-features=Translate,BackForwardCache,MediaRouter,OptimizationHints",
+  "--mute-audio",
+];
+// each account claims in its OWN patchright persistent context (own proxy/IP + fresh profile).
 async function claimEntry(entry) {
-  const ctx = await browser.newContext({ userAgent: UA, ...(entry.proxy ? { proxy: entry.proxy } : {}) });
+  const profile = join(tmpdir(), `pr-${entry.address.slice(2, 10)}-${Date.now()}`);
+  const ctx = await chromium.launchPersistentContext(profile, {
+    headless: HEADLESS, viewport: null,
+    args: MEM_FLAGS,
+    ...(entry.proxy ? { proxy: entry.proxy } : {}),
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ":0" },
+  });
+  activeCtx = ctx;
+  // WebGL renderer spoof — REQUIRED on a GPU-less VPS. With no GPU, chromium falls back to
+  // SwiftShader, and Turnstile flags the "SwiftShader" renderer string as a bot → the widget
+  // won't self-solve. Report a common real GPU instead (verified: flips the self-solve on).
+  // patchright runs page.evaluate in an isolated world, so this main-world patch is invisible to
+  // our own reads but seen by Turnstile's main-world JS — exactly what we want.
+  await ctx.addInitScript(() => {
+    for (const P of [self.WebGLRenderingContext, self.WebGL2RenderingContext]) {
+      if (!P) continue;
+      const gp = P.prototype.getParameter;
+      P.prototype.getParameter = function (p) {
+        if (p === 37445) return "Intel Inc.";                                                             // UNMASKED_VENDOR_WEBGL
+        if (p === 37446) return "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)"; // UNMASKED_RENDERER_WEBGL
+        return gp.call(this, p);
+      };
+    }
+  });
   try {
-    const page = await ctx.newPage();
+    const page = ctx.pages()[0] || await ctx.newPage();
     if (!(await ensurePassed(page))) { console.log(`  ${entry.address} checkpoint not passed`); return false; }
-    let token;
-    try { token = await solveTurnstile(); } catch (e) { console.log("  captcha fail:", e.message); return false; }
+    // free self-solve first; fall back to 2captcha only if it never populates AND a key is set.
+    let token = await readSelfSolvedToken(page), via = "self-solve";
+    if (!token && apiKey) { try { token = await solveTurnstile(); via = "2captcha"; } catch (e) { console.log("  captcha fail:", e.message); return false; } }
+    if (!token) { console.log(`  ${entry.address} no turnstile token (needs a display/xvfb, or set CAPTCHA_API_KEY)`); return false; }
     const r = await page.evaluate(async ({ rollup, addr, token }) => {
       const res = await fetch(`/api/trpc/hub.requestFaucetFunds?batch=1`, {
         method: "POST", headers: { "content-type": "application/json" },
@@ -135,14 +193,13 @@ async function claimEntry(entry) {
       return { s: res.status, t: await res.text() };
     }, { rollup: ROLLUP, addr: entry.address, token });
     let ok = false; try { ok = JSON.parse(r.t)[0].result.data.json.success === true; } catch {}
-    console.log(`  ${entry.address} ${entry.proxy ? "[proxy]" : "[no-proxy]"} claim [${r.s}] ${ok ? "OK +0.1" : r.t.slice(0, 120)}`);
+    console.log(`  ${entry.address} ${entry.proxy ? "[proxy]" : "[no-proxy]"} [${via}] claim [${r.s}] ${ok ? "OK +0.1" : r.t.slice(0, 120)}`);
     return ok;
-  } finally { await ctx.close(); }
+  } finally { await ctx.close().catch(() => {}); activeCtx = null; try { rmSync(profile, { recursive: true, force: true }); } catch {} }
 }
 
 if (!LOOP) {
   for (const e of entries) { console.log(`\n${e.address}`); await claimEntry(e).catch((err) => console.log("  err", err.message)); await sleep(4000); }
-  await browser.close();
 } else {
   // per-address random 1–3h scheduling, persisted across restarts, each via its own proxy
   console.log(`faucet loop: ${entries.length} addresses, ${FIXED_HOURS ? `every ${FIXED_HOURS}h` : "random 1–3h"} each${proxyList.length ? " (per-account proxy)" : ""}`);

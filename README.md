@@ -43,6 +43,11 @@ Per UTC-day (small values, once/daily gated, each tx simulate-guarded):
 - **zns** — gm (daily) + register .lit domain (once)
 - **omnihub** — create collection + mint litvm-omnihub (once)
 - **litvmswap** — wrap (zkLTC→WzkLTC) → unwrap all
+- **aura** — Universal Faucet mint (`withdraw` 0.0001/token) → stake AURA (first-stake task) → buy on
+  an open launchpad sale (buy-tokens task) **+ off-chain incentive points**: wallet-sig auth
+  (`auth:${addr}`), daily login claim (+20/day → 7-day streak), and auto-verify every open non-social
+  task. On-chain tasks (stake/buy/50-txns/streak) clear from real activity. Social tasks
+  (X/Discord/Telegram) are OAuth-gated server-side — not API-bypassable, skipped.
 
 Configure which run in `config.yaml` `ecosystem.dapps`. See `docs/litvm-live-notes.md`
 for every contract address + decoded call.
@@ -50,17 +55,27 @@ for every contract address + decoded call.
 ## Faucet (gas) — `npm run faucet`
 
 Auto-claims the Caldera faucet (**0.1 zkLTC** per fresh wallet). It passes the hub's
-Vercel checkpoint with a short headless browser, solves the Cloudflare Turnstile via
-2captcha, and calls the `hub.requestFaucetFunds` tRPC. `recipientAddress` is a param —
-no wallet connect.
+Vercel checkpoint, then **self-solves the Cloudflare Turnstile with `patchright`** (an
+undetected Playwright — the hub's own widget auto-issues the token, read from the hidden
+`cf-turnstile-response` field), and calls `hub.requestFaucetFunds`. **No 2captcha needed.**
+`recipientAddress` is a param — no wallet connect. Each account claims via its own proxy/IP.
+
+patchright must run **headful** (true headless doesn't beat Turnstile). On a desktop/WSLg it
+uses your display; on a **headless VPS it auto-wraps with `xvfb-run`** (virtual framebuffer —
+no GUI, fully server-side). Install xvfb once: `sudo apt install -y xvfb`. **A GPU-less VPS works**
+too — the tool spoofs the WebGL renderer (SwiftShader → a real GPU string) so Turnstile still
+self-solves (without it, no-GPU chromium is flagged and the token never appears).
 
 ```bash
-npm i playwright        # one-time (+ its system libs; present on most VPS)
-# .env: CAPTCHA_API_KEY=<2captcha key>
+npm install              # pulls patchright (+ downloads its chromium)
+sudo apt install -y xvfb # headless VPS only (desktop/WSLg skips this)
 npm run faucet           # claim for all accounts in accounts.json
 npm run faucet -- acc3   # one account by id
 npm run faucet -- 0xABC… # one raw address
 ```
+
+`CAPTCHA_API_KEY` (2captcha) is now **optional** — only a fallback if the self-solve token
+never populates. `FAUCET_HEADLESS=1` forces true headless (needs the 2captcha fallback).
 
 An address already at the faucet cap/cooldown returns "Failed to send transaction" —
 expected; claim per wallet, not repeatedly. Run on demand (not in the daemon loop).

@@ -129,8 +129,40 @@ Full flow (`tools/faucet-claim.mjs`, run on demand):
 - Per-address cap/cooldown: an address already at the cap returns `{"success":false,"message":"Failed to send transaction"}`.
   (Our funded main wallet hit this; a fresh wallet succeeded.) So claim per-wallet, not repeatedly.
 - Requires `npm i playwright` + its system libs (libnspr4, libnss3, libasound2 — present on the VPS
-  since forge/faucet-pow run there) and `CAPTCHA_API_KEY` in `.env`. Off the always-on backend
-  pipeline; run when wallets need gas: `node tools/faucet-claim.mjs [accountId|0xaddr]`.
+  since forge/faucet-pow run there). Off the always-on backend pipeline; run when wallets need gas:
+  `node tools/faucet-claim.mjs [accountId|0xaddr]`.
+
+### Turnstile captcha bypass — SELF-SOLVE, no 2captcha ✅ (verified live)
+Probed the tRPC + widget live:
+- Server **validates** turnstileToken: empty → `"Missing turnstile token"`, bogus → `"…validating your
+  request"`. So the token can't be skipped/faked.
+- The widget is Cloudflare Turnstile **managed/normal** mode (iframe URL `…/0x4AAAAAAASRorjU_k9HAdVc/
+  light/…/new/normal`). Under vanilla Playwright (headless AND headful) it never auto-issues a token —
+  the automation is detected (`navigator.webdriver`, CDP), `cf-turnstile-response` stays empty,
+  the Request button stays disabled. Clicking the cross-origin checkbox also fails.
+- **`patchright`** (undetected Playwright: patches `navigator.webdriver`→false + the CDP Runtime leak)
+  makes the managed widget **self-issue a ~730-char token to `cf-turnstile-response` at t≈0** — read it
+  straight from the hidden input, no 2captcha. Verified: that token PASSES server validation (the claim
+  then returns the normal faucet result, e.g. `"Failed to send transaction"` = per-address cap, a
+  different/downstream error class from the captcha errors).
+- **Display requirement:** patchright must run **headful**. True `headless:true` fails — with a UA spoof
+  it passes the Vercel checkpoint but the Turnstile still won't self-solve (headless is detected by
+  WebGL/screen/render signals). Fix on a headless VPS: **`xvfb-run -a`** (virtual framebuffer, no GUI) —
+  verified the token self-issues under xvfb. `tools/faucet-claim.mjs` auto-re-execs under `xvfb-run` when
+  `$DISPLAY` is unset (and xvfb is installed); WSLg/desktop uses its real display directly.
+- **GPU-less VPS — needs a WebGL renderer spoof** (verified live, this was the subtle blocker):
+  a VPS with no GPU makes chromium fall back to **SwiftShader**, and the WebGL renderer string
+  `"ANGLE (Google, … SwiftShader …)"` is flagged by Turnstile as a bot → the widget will NOT self-solve
+  (token never populates). Verified: forced-SwiftShader = 2/2 NO token; with the spoof = 2/2 YES. Fix
+  (built into `claimEntry`): an `addInitScript` that overrides `WebGLRenderingContext.prototype.getParameter`
+  for `UNMASKED_VENDOR_WEBGL` (37445)→`"Intel Inc."` and `UNMASKED_RENDERER_WEBGL` (37446)→a common real GPU
+  (`Intel UHD 620`). patchright runs `page.evaluate` in an ISOLATED world, so this main-world patch is
+  invisible to our own reads but IS seen by Turnstile's main-world JS — which is exactly what flips the
+  self-solve on. (My earlier headful "success" used this box's WSLg hardware GPU, hiding the issue.)
+- Wiring: `tools/faucet-claim.mjs` now imports `patchright`, launches a per-account persistent context
+  (own proxy/IP + fresh temp profile, `viewport:null`, no UA/automation-leaking flags), reads the
+  self-solved token, and only falls back to 2captcha if `CAPTCHA_API_KEY` is set and the token never
+  populates. `FAUCET_HEADLESS=1` forces true headless (needs the 2captcha fallback).
 
 ## Ecosystem on-chain actions (Arkada-free) — WORKING ✅
 Direct dApp interactions on litVM testnet (chainId 4441). `src/ecosystem/dapps.ts`,
@@ -175,6 +207,55 @@ drunkencats: faucet()x2, swap native->dcUSDT, addLiquidityNative, **openVault(1 
 onmi createToken. zns gm (0x779a220b, fee 0.004) + registerDomains .lit. omnihub create + **mint litvm-omnihub** (0xCe29a899, mint(0,1,0x0,[]) value 0.02). litvmswap wrap.
 - drunkencats VaultManager `0x7a1d18b9…` openVault(uint256 dcUSD) payable; min debt 1 dcUSD, MCR ~0.03 zkLTC/dcUSD.
 - omnihub litvm-omnihub collection `0xCe29a8993CE78E420BfC7646f4AEa90B42bFd9D9` (proxy), mint(uint256,uint256,address,bytes32[]) sel 0xa25ffea8 value 0.02; gate once.
+
+## aura (beta.auralaunch.org) — added
+LitVM launchpad. Contracts from the app bundle (`_next/static/chunks`, chainId 4441):
+- factory `0xd084FA1f5530f82c814FB937E662aF95B9e5F1c8`, token `0x0B779FF5855bc4E6937EbFa64aBE7AB8207f09c3`,
+  staking `0x9D001EAa62E3c8A7E3f5a47523Fa7DC3790fcBBB`, **faucet `0x2881BDa1E897d02D97aa7Ef1161d9aA7f227f315`**.
+- **Faucet (LaunchpadFaucet)** — verified ABI:
+  - `getTokens() view -> (address contractAddress, string symbol)[]` = the mintable test tokens.
+  - `withdraw(address contractAddress) payable` value **0.0001 zkLTC** = "Mint faucet Aura" (one per token).
+  - `lastWithdrawalTime(address user, address token) view -> uint256` = per-token cooldown.
+  - Wired: `aura` flow, daily gate, reads `getTokens()` then `withdraw` each (cooldowned ones simulate-revert & skip).
+- **Incentive points (goal ≥1000) — OFF-CHAIN, REVERSED + WIRED** (`src/ecosystem/aura-points.ts`,
+  headless, verified live on fresh throwaway wallets):
+  - **Auth (custom, NOT NextAuth):** sign the STATIC message `auth:${address}` (personal_sign, no nonce),
+    `POST /api/auth {address, signature}` → `{ token }` (token = `<sig>:<address>`). Send as cookie
+    `aura_token`. Fresh wallet auto-registers. (NextAuth `/api/auth/*` only holds twitter+discord OAuth
+    for the social tasks; `/api/auth/me` is a GET-only custom route reading the wallet session.)
+  - **Daily login:** `POST /api/auth/me/claim` → `{new_streak, points_added:20}` — +20/day, feeds the
+    7-day-streak task (+320).
+  - **Tasks:** `GET /api/incentives/me` → `{ ranks, me:[{points,completed_txns,position}], tasks[] }`.
+    Per OPEN, non-social task: `POST /api/incentives/tasks/{task_id}/verify?index=0` (index just present;
+    server gates each on the real requirement, e.g. 50+ txns / first stake → 403 "requirements not met"
+    until satisfied). Verified live: `complete_wallet_connection` → 200 +25.
+  - **Task ids + points:** complete_wallet_connection 25 · execute_first_stake 50 · buy_tokens_in_sale 20 ·
+    complete_7_day_streak 320 · complete_50_plus_transactions 1250 · (social, SKIP:) connect_x 150,
+    connect_discord 200, join_telegram 1000.
+  - **Points ≈ 16 × completed_txns** (leaderboard: 72390 pts / 4522 txns) — so every on-chain ecosystem tx
+    the bot does also earns Aura points. Path to 1000 w/o social: 50-txns task (1250) alone clears it;
+    plus daily 20×n + 7-day 320 + wallet/stake/buy.
+  - **Wired:** `runAuraPoints(ctx)` runs at the END of `runEcosystem` (after all on-chain flows, so tx/stake
+    gates pass), daily-gated, proxy-routed (per-account IP via `dispatcherFor`). dryRun → no-op "dry".
+- **"Universal Faucet"** = the SAME `faucet.withdraw(token)` 0.0001 (incentives-page UI, "Claim featured
+  test tokens", per-token cooldown "Next Mint in"). Already wired as the `aura` faucetMint step.
+- **On-chain tasks — WIRED** (contracts from `/api/pools/staking` + `/api/pools/launchpad`, verified live):
+  - **Staking** `stake(uint256 amount, uint256 duration) payable`, `minimumStakeAmount()=0`,
+    `minimumStakeDuration()=2592000` (30d). Pools: AURA `0x9D001EA…` (token `0x0B779FF…`, not native),
+    native-zkLTC `0xAD50bfE6…`, REV `0xDAaED9BC…`. Wired `aura.stake` (once): approve AURA→pool +
+    `stake(portion, 2592000)` — locks worthless faucet AURA, not gas. → task `execute_first_stake` (+50).
+  - **Launchpad buy** `buy() payable` (sel 0xa6f2ae3a), value = `minPurchase()` (HDX = 0.001). Sales rotate
+    by `phase` (closed ones revert "Invalid phase"); `aura.buy` (once) fetches `/api/pools/launchpad`,
+    picks the first pool whose `buy()` passes a balance-overridden eth_call, value = its minPurchase.
+    → task `buy_tokens_in_sale` (+20). Live: HDX `0x2dC9ff38…` buy 0.001 OK; AURA/TORN sales closed.
+  - `complete_50_plus_transactions` (+1250) + `complete_7_day_streak` (+320) accrue automatically from the
+    bot's daily ecosystem tx volume + the daily-login claim — nothing extra to wire.
+- **Social tasks — NOT bypassable** (probed live, all 403 "requirements not met" until satisfied):
+  `connect_x`/`follow_x` (X), `connect_discord`, `join_telegram`. connect uses NextAuth `signIn("twitter"|
+  "discord")` OAuth → sets `profile.twitter_username`/`discord_username` server-side; verify checks those
+  fields, so no HTTP bypass. Would need real (throwaway) X/Discord accounts + automated OAuth consent
+  (browser) + a Telegram userbot posting the wallet address — heavy/ToS-risky, not wired. Skipped in
+  `aura-points.ts` SKIP_TASKS.
 
 ## litvmswap swap + lester (added)
 - **litvmswap swap** — router 0xEb5600 (unverified V3-style aggregator, selector 0xce1e7030):

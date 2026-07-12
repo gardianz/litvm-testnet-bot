@@ -2,6 +2,7 @@ import type { Ctx } from "../steps/types.js";
 import { FLOW_MAP, type Tx } from "./flows.js";
 import { assertChain } from "../evm.js";
 import { ranToday, markRan, saveStepState } from "../state.js";
+import { runAuraPoints } from "./aura-points.js";
 
 // Execute each configured dApp flow. A flow is an ordered list of steps; each step
 // builds a sequence of txs (e.g. approve + action). Every tx is simulated (eth_call)
@@ -46,6 +47,12 @@ export async function runEcosystem(ctx: Ctx): Promise<Record<string, string>> {
       out[tag] = ctx.dryRun ? `dry(${okCount}/${txs.length})` : (hashes[0] ? `${hashes[0].slice(0, 12)}(${okCount}/${txs.length})` : `revert(${reverts})`);
       ctx.report?.(tag, out[tag]);
     }
+  }
+
+  // Aura off-chain incentive points — runs AFTER every on-chain flow so the wallet's tx
+  // count / stake / buy already satisfy the server-side task gates. (daily-gated inside)
+  if (ctx.cfg.ecosystem.dapps.includes("aura")) {
+    Object.assign(out, await runAuraPoints(ctx));
   }
   return out;
 }

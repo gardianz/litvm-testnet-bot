@@ -177,5 +177,74 @@ const lester: Flow = {
   ],
 };
 
-export const FLOWS: Flow[] = [drunkencats, onmi, zns, omnihub, litvmswap, lester];
+// ---- aura (beta.auralaunch.org) — LitVM launchpad; verified from app bundle ----
+// LaunchpadFaucet.getTokens() -> {contractAddress, symbol}[] mintable test tokens.
+// "Mint faucet Aura" = withdraw(contractAddress) payable 0.0001 zkLTC per token.
+// Incentive points (goal 1000) are OFF-CHAIN (/api/incentives/tasks/{id}/verify, wallet-sig
+// auth) — backend monitors on-chain activity, so minting the faucet tokens is the real
+// on-chain work the point-tasks verify against. The off-chain claim is not wired (see live-notes).
+const AURA_FAUCET = "0x2881BDa1E897d02D97aa7Ef1161d9aA7f227f315" as const;
+const AURA_TOKEN = "0x0B779FF5855bc4E6937EbFa64aBE7AB8207f09c3" as const;
+const AURA_STAKE_POOL = "0x9D001EAa62E3c8A7E3f5a47523Fa7DC3790fcBBB" as const; // AURA staking pool (is_native=false)
+const AURA_STAKE_DUR = 2592000n; // 30d = minimumStakeDuration (live)
+const AURA_FAUCET_ABI = parseAbi([
+  "function getTokens() view returns ((address contractAddress, string symbol)[])",
+  "function withdraw(address contractAddress) payable",
+]);
+const AURA_MINT_FEE = 100000000000000n; // 0.0001 zkLTC per token (from bundle)
+const BUY_ABI = parseAbi(["function buy()", "function minPurchase() view returns (uint256)"]);
+const aura: Flow = {
+  dapp: "aura",
+  steps: [
+    // "Universal Faucet" = mint every featured test token: withdraw(token) 0.0001 each.
+    { id: "faucetMint", gate: "daily", build: async ({ pub }) => {
+      let toks: readonly { contractAddress: `0x${string}` }[] = [];
+      try {
+        toks = await pub.readContract({ address: AURA_FAUCET, abi: AURA_FAUCET_ABI, functionName: "getTokens" }) as any;
+      } catch { return []; }
+      // one withdraw per faucet token; cooldowned tokens simulate-revert and skip.
+      return toks.map((t) => ({
+        to: AURA_FAUCET, value: AURA_MINT_FEE, label: `aura mint ${t.contractAddress.slice(0, 8)}`,
+        data: enc("function withdraw(address)", "withdraw", [t.contractAddress]),
+      }));
+    } },
+    // task "execute_first_stake": stake a small portion of faucet-minted AURA (worthless token,
+    // preserves gas) into the AURA pool, lock = 30d min. approve + stake. once.
+    { id: "stake", gate: "once", build: async ({ address, pub }) => {
+      const bal = await balanceOf(pub, AURA_TOKEN, address);
+      if (bal === 0n) return [];
+      const amt = bal / 10n > 0n ? bal / 10n : bal;
+      const txs: Tx[] = [];
+      const ap = await ensureAllowance(pub, AURA_TOKEN, address, AURA_STAKE_POOL, amt);
+      if (ap) txs.push({ ...ap, label: "approve AURA stake" });
+      txs.push({ to: AURA_STAKE_POOL, value: 0n, label: "aura stake",
+        data: enc("function stake(uint256,uint256)", "stake", [amt, AURA_STAKE_DUR]) });
+      return txs;
+    } },
+    // task "buy_tokens_in_sale": buy() payable on the first launchpad pool whose phase accepts a
+    // buy (sales rotate → pick dynamically from the API, test with a balance-overridden eth_call).
+    { id: "buy", gate: "once", build: async ({ address, pub }) => {
+      let pools: { pool_address?: `0x${string}`; token_symbol?: string }[] = [];
+      try {
+        const r = await fetch("https://beta.auralaunch.org/api/pools/launchpad?limit=20", { signal: AbortSignal.timeout(15000) });
+        pools = (await r.json() as any).data ?? [];
+      } catch { return []; }
+      const buyData = enc("function buy()", "buy", []);
+      for (const p of pools) {
+        const pool = p.pool_address; if (!pool) continue;
+        let min = 1000000000000000n; // 0.001 fallback
+        try { min = await pub.readContract({ address: pool, abi: BUY_ABI, functionName: "minPurchase" }) as bigint; } catch {}
+        if (min === 0n) min = 1000000000000000n;
+        try {
+          await pub.call({ account: address, to: pool, data: buyData, value: min,
+            stateOverride: [{ address, balance: 1000000000000000000n }] }); // 1 zkLTC override → test phase only
+          return [{ to: pool, value: min, label: `aura buy ${p.token_symbol ?? ""}`, data: buyData }];
+        } catch { /* wrong phase / closed — try next */ }
+      }
+      return [];
+    } },
+  ],
+};
+
+export const FLOWS: Flow[] = [drunkencats, onmi, zns, omnihub, litvmswap, lester, aura];
 export const FLOW_MAP: Record<string, Flow> = Object.fromEntries(FLOWS.map((f) => [f.dapp, f]));

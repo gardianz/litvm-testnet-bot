@@ -53,9 +53,10 @@ questActions: {}
 # Direct on-chain litVM ecosystem flows (no Arkada). Multi-step, gated once/daily.
 # Available: drunkencats (5-token faucet, swap, addLiq, vault, removeLiq),
 #            onmi (createToken), zns (gm + register), omnihub (create + mint),
-#            litvmswap (wrap + unwrap).
+#            litvmswap (wrap + unwrap), lester (deploy/mint/post),
+#            aura (mint all launchpad faucet tokens — beta.auralaunch.org).
 ecosystem:
-  dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester"]
+  dapps: ["drunkencats", "onmi", "zns", "omnihub", "litvmswap", "lester", "aura"]
 
 steps:
   register: false
